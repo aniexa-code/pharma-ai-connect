@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { CopyButton } from "@/components/client";
 import { NotificationList, Thread } from "@/components/Thread";
 import { Alert, Badge, ButtonLink, Card } from "@/components/ui";
-import { ContactLinks } from "@/components/PharmacyCard";
+import { ContactLinks } from "@/components/ContactLinks";
 import { formatMoney } from "@/lib/config";
 import { REQUEST_STATUS_LABEL, requestByToken, requestUrl } from "@/lib/services/requests";
 import { ReplyForm } from "./ReplyForm";

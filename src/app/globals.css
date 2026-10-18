@@ -1,25 +1,102 @@
 @import "tailwindcss";
 
+/* Identité Pharma AI Connect : Deep Navy, Medical Blue, Technology Turquoise, Icy White. */
 @theme {
-  --color-brand-50: #ecfdf7;
-  --color-brand-100: #d1faec;
-  --color-brand-500: #10a37f;
-  --color-brand-600: #0b8a6b;
-  --color-brand-700: #0a6e57;
-  --color-ink: #10231d;
-  --color-muted: #5b6b66;
-  --color-line: #dfe8e4;
-  --color-surface: #f6faf8;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-navy: #10243b;
+  --color-navy-800: #17304c;
+  --color-navy-700: #22405f;
+  --color-blue: #176b87;
+  --color-blue-600: #135a72;
+  --color-blue-50: #e8f2f6;
+  --color-turq: #28d5c2;
+  --color-turq-50: #e6faf7;
+  --color-turq-700: #0f8f81;
+  --color-icy: #f4f8fb;
+  --color-line: #e3eaf0;
+  --color-line-strong: #cfdae3;
+  --color-muted: #6a7b8c;
+  --color-faint: #9aa8b5;
+  --color-ink: #10243b;
+  --color-warn: #e8913a;
+  --color-warn-50: #fdf3e8;
+  --color-danger: #d9534f;
+  --color-danger-50: #fbeeee;
+
+  /* Alias historiques : l'ancien vert « brand » devient le bleu médical. */
+  --color-brand-50: #e8f2f6;
+  --color-brand-100: #d3e6ee;
+  --color-brand-500: #176b87;
+  --color-brand-600: #176b87;
+  --color-brand-700: #135a72;
+  --color-surface: #f4f8fb;
+
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-confirm: confirm-flash 1.6s ease-out 1;
+  --animate-float: float 9s ease-in-out infinite;
+  --animate-twinkle: twinkle 3.2s ease-in-out infinite;
+  --animate-draw: draw 2.4s ease-out both;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  80%, 100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes confirm-flash {
+  0% { box-shadow: 0 0 0 0 rgb(40 213 194 / 0.55); background-color: #f59e0b; }
+  35% { background-color: #28d5c2; }
+  100% { box-shadow: 0 0 0 10px rgb(40 213 194 / 0); background-color: #28d5c2; }
+}
+@keyframes float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)); }
+  50% { transform: translate3d(0, -14px, 0) rotate(calc(var(--r, 0deg) + 8deg)); }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+@keyframes draw {
+  from { stroke-dashoffset: 400; }
+  to { stroke-dashoffset: 0; }
 }
 
 body {
-  background: var(--color-surface);
+  background: var(--color-icy);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.02em;
 }
 
 input, select, textarea {
   font-size: 16px; /* évite le zoom automatique sur mobile */
+}
+
+/* Grille technique très discrète des zones « premium ». */
+.tech-grid {
+  background-image:
+    linear-gradient(to right, rgb(16 36 59 / 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(16 36 59 / 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.stagger > * { animation: var(--animate-fade-up); }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(n + 6) { animation-delay: 300ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

@@ -98,6 +98,7 @@ model Stock {
   pharmacyId  String
   productId   String
   price       Int         // prix unitaire, en unités de la devise (pas de centimes)
+  quantity    Int?        // quantité en stock, si la pharmacie choisit de la renseigner
   status      StockStatus @default(UNKNOWN)
   source      StockSource @default(ESTIMATE)
   confirmedAt DateTime?
@@ -119,6 +120,19 @@ model PharmacyUser {
   createdAt    DateTime @default(now())
 
   pharmacy     Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+}
+
+// Livreurs : voient les missions de livraison, l'adresse complète seulement après acceptation.
+model Courier {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  phone        String
+  passwordHash String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  orders       Order[]
 }
 
 // ---------- Comptes clients (facultatifs) ----------
@@ -265,6 +279,8 @@ model Order {
   deliveryAddress    String?
   deliveryNotes      String?
   courierName        String?
+  courierId          String?
+  missionNo          Int         @unique @default(autoincrement()) // numéro de mission livreur, ex. PA-2048
   requiresPrescription Boolean   @default(false)
   prescriptionCheckedAt DateTime?
   subtotal           Int
@@ -286,6 +302,7 @@ model Order {
 
   pharmacy           Pharmacy    @relation(fields: [pharmacyId], references: [id])
   customer           Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  courier            Courier?    @relation(fields: [courierId], references: [id], onDelete: SetNull)
   items              OrderItem[]
   events             OrderEvent[]
   payments           Payment[]

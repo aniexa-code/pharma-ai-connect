@@ -57,22 +57,26 @@ async function main() {
     await check("rechercher un médicament et consulter les résultats", async () => {
       await client.fill("input[name=q]", "ibuprof");
       await client.fill("input[name=lieu]", "Talangaï");
-      await client.selectOption("select[name=rayon]", "3");
       await client.click("#search-form button[type=submit]");
       await client.waitForURL(/\/recherche/);
-      const card = client.getByTestId("pharmacy-result").first();
+      const card = client.getByTestId("pharmacy-result").filter({ hasText: "Talangaï" });
       await card.waitFor();
       const text = await card.innerText();
       assert.match(text, /Talangaï/);
-      assert.match(text, /Fiabilité/);
-      assert.match(text, /Dernière confirmation|Jamais confirmée/);
-      assert.match(text, /Ouverte|Fermée/);
+      assert.match(text, /Disponible|Confirmation nécessaire|Indisponible|Information ancienne/);
+      assert.match(text, /Mis à jour il y a|Jamais/);
+      assert.match(text, /À \d/);
+      assert.match(await client.getByTestId("result-count").innerText(), /correspond/);
       await shot(client, "resultats");
     });
 
     let requestUrl = "";
     await check("demander une confirmation à une pharmacie, sans compte", async () => {
-      await client.getByTestId("pharmacy-result").first().getByText("Demander une vérification").click();
+      await client.getByTestId("pharmacy-result").filter({ hasText: "Talangaï" }).getByRole("link", { name: /Voir/ }).click();
+      await client.waitForURL(/\/pharmacies\/pharmacie-de-talangai/);
+      await client.getByTestId("availability").first().waitFor();
+      await shot(client, "fiche");
+      await client.getByRole("link", { name: "Confirmer avec la pharmacie" }).click();
       await client.waitForURL(/\/demande\/nouvelle/);
       await client.fill("input[name=quantity]", "2");
       await client.fill("input[name=contactName]", "Grâce");
@@ -107,7 +111,7 @@ async function main() {
       await client.fill("input[name=phone]", "+242 06 123 45 67");
       await client.check("input[name=paymentMethod][value=CASH]");
       await shot(client, "commande");
-      await client.click("text=Valider la commande");
+      await client.click("text=Confirmer la demande");
       await client.waitForURL(/\/suivi\/[A-Za-z0-9_-]{43}\?nouvelle=1/);
       pickupUrl = client.url().split("?")[0];
       assert.match(await client.getByTestId("order-ref").innerText(), /^CMD-[2-9A-Z]{4}-[2-9A-Z]{4}$/);
@@ -123,6 +127,7 @@ async function main() {
       const res = await client.goto(pickupUrl);
       assert.equal(res?.status(), 200);
       assert.match(await client.getByTestId("order-status").innerText(), /attente de confirmation/);
+      assert.match(await client.getByTestId("timeline").innerText(), /Demande envoyée[\s\S]*Pharmacie contactée[\s\S]*Terminée/);
     });
 
     const ref = await client.getByTestId("order-ref").innerText();
@@ -152,13 +157,13 @@ async function main() {
       await client.fill(`input[name=q_${para.id}]`, "3");
       await client.click("text=Commander la sélection");
       await client.waitForURL(/\/commander/);
-      await client.check("input[name=fulfillment][value=DELIVERY]");
+      await client.locator("label", { hasText: "Livraison" }).first().click();
       await client.fill("input[name=deliveryAddress]", "Rue Mbochis, portail bleu, Poto-Poto");
       await client.fill("input[name=contactName]", "Paul");
       await client.selectOption("select[name=notifyChannel]", "LINK");
       await client.fill("input[name=phone]", "+242 05 765 43 21");
       await client.check("input[name=paymentMethod][value=MOBILE_MONEY]");
-      await client.click("text=Valider la commande");
+      await client.click("text=Confirmer la demande");
       await client.waitForURL(/\/paiement/);
       await client.getByRole("button", { name: "Simuler un échec" }).click();
       await client.getByText("Dernière tentative : échoué").waitFor();
@@ -181,23 +186,45 @@ async function main() {
         await pharmacist.waitForLoadState("networkidle");
       };
       await advance("Confirmée par la pharmacie");
-      await pharmacist.fill("input[name=courierName]", "Jonas");
-      await advance("Livreur attribué");
-      await advance("Récupérée par le livreur");
-      await advance("Livraison en cours");
-      await pharmacist.fill("input[name=code]", "000001");
-      await pharmacist.click("text=Valider la livraison");
-      await pharmacist.getByText("Code incorrect.").waitFor();
-      await pharmacist.fill("input[name=code]", code);
-      await pharmacist.click("text=Valider la livraison");
-      await pharmacist.getByText("Livrée").first().waitFor();
+
+      // Centre de livraison : le livreur voit la zone, accepte, récupère, livre avec le code du client.
+      const courier = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+      await courier.goto(`${BASE}/livreur/connexion`);
+      await courier.fill("input[name=email]", "livreur@demo.pharma-ai.local");
+      await courier.fill("input[name=password]", PASSWORD);
+      await courier.click("button[type=submit]");
+      await courier.waitForURL(`${BASE}/livreur`);
+      const mission = courier.getByTestId("open-mission").first();
+      assert.match(await mission.innerText(), /Zone client : Poto-Poto/);
+      assert.ok(!(await mission.innerText()).includes("portail bleu"), "adresse exacte masquée avant acceptation");
+      await shot(courier, "livreur-missions");
+      await mission.getByRole("button", { name: "Accepter" }).click();
+      const mine = courier.getByTestId("my-mission");
+      await mine.getByText("portail bleu").waitFor();
+      await mine.getByRole("button", { name: "Commande récupérée" }).click();
+      await mine.getByRole("button", { name: "Démarrer la livraison" }).click();
+      await mine.locator("input[name=code]").fill("000001");
+      await mine.getByRole("button", { name: "Valider la livraison" }).click();
+      await mine.getByText("Code incorrect.").waitFor();
+      await shot(courier, "livreur-mission");
+      await mine.locator("input[name=code]").fill(code);
+      await mine.getByRole("button", { name: "Valider la livraison" }).click();
+      await courier.getByTestId("my-mission").waitFor({ state: "detached" });
+      await courier.context().close();
 
       await client.goto(deliveryUrl);
       assert.match(await client.getByTestId("order-status").innerText(), /Livrée/);
       const notes = await client.getByTestId("notifications").innerText();
-      for (const t of ["enregistrée", "Paiement reçu", "a échoué", "confirmée", "livreur (Jonas)", "récupéré", "en cours de livraison", "a été livrée"])
+      for (const t of ["enregistrée", "Paiement reçu", "a échoué", "confirmée", "livreur (Jonas (démo))", "récupéré", "en cours de livraison", "a été livrée"])
         assert.ok(notes.includes(t), `notification « ${t} »`);
       await shot(client, "suivi-livree");
+    });
+
+    await check("le tableau de bord pharmacie affiche l'activité du jour", async () => {
+      await pharmacist.goto(`${BASE}/pharmacie`);
+      const kpis = await pharmacist.getByTestId("kpis").innerText();
+      assert.match(kpis, /commandes/);
+      await shot(pharmacist, "pharmacie");
     });
 
     await check("créer un compte plus tard et rattacher la commande après vérification", async () => {

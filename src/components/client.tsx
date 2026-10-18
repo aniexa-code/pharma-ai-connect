@@ -1,13 +1,20 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
-import { buttonClass } from "./ui";
+import { buttonClass, type ButtonVariant } from "./ui";
 
-export function SubmitButton({ children, variant = "primary", className = "", name, value }: { children: React.ReactNode; variant?: "primary" | "secondary" | "danger"; className?: string; name?: string; value?: string }) {
+export function SubmitButton({ children, variant = "primary", className = "", name, value }: { children: React.ReactNode; variant?: ButtonVariant; className?: string; name?: string; value?: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" name={name} value={value} disabled={pending} className={buttonClass(variant, className)}>
-      {pending ? "Un instant…" : children}
+      {pending ? (
+        <span className="inline-flex items-center gap-2">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Un instant…
+        </span>
+      ) : (
+        children
+      )}
     </button>
   );
 }
@@ -32,8 +39,9 @@ export function LocateButton() {
     );
   };
   return (
-    <button type="button" onClick={locate} className="text-sm font-medium text-brand-700 underline-offset-2 hover:underline">
-      {state === "busy" ? "Localisation…" : state === "ok" ? "Position utilisée ✓" : state === "denied" ? "Position indisponible : saisissez un lieu" : "Utiliser ma position (facultatif)"}
+    <button type="button" onClick={locate} className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue underline-offset-2 hover:underline">
+      <span className={`h-2 w-2 rounded-full ${state === "ok" ? "bg-turq" : state === "busy" ? "animate-pulse bg-warn" : "bg-blue/40"}`} />
+      {state === "busy" ? "Localisation…" : state === "ok" ? "Position utilisée" : state === "denied" ? "Position indisponible : saisissez un lieu" : "Utiliser ma position (facultatif)"}
     </button>
   );
 }
@@ -71,5 +79,22 @@ export function AccountPrompt({ children }: { children: React.ReactNode }) {
         children
       )}
     </div>
+  );
+}
+
+/** Données qui se mettent à jour discrètement : rafraîchit la page serveur à intervalle régulier. */
+export function AutoRefresh({ seconds = 20 }: { seconds?: number }) {
+  const router = useRouter();
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, seconds * 1000);
+    return () => clearInterval(id);
+  }, [router, seconds]);
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-faint">
+      <span className="relative inline-flex h-1.5 w-1.5"><span className="absolute inset-0 rounded-full bg-turq animate-pulse-ring" /><span className="relative h-1.5 w-1.5 rounded-full bg-turq" /></span>
+      Mise à jour en direct
+    </span>
   );
 }

@@ -121,6 +121,13 @@ async function main() {
     }
     i++;
   }
+  if (password) {
+    await db.courier.upsert({
+      where: { email: "livreur@demo.pharma-ai.local" },
+      update: {},
+      create: { email: "livreur@demo.pharma-ai.local", name: "Jonas (démo)", phone: "+242065550999", passwordHash: await bcrypt.hash(password, 10) },
+    });
+  }
   console.log(`Données de démonstration prêtes : ${pharmacies.length} pharmacies, ${products.length} produits.`);
 }
 

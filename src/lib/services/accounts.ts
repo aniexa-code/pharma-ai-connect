@@ -82,3 +82,11 @@ export async function updateProfile(customerId: string, raw: z.input<typeof pref
 export async function deleteAccount(customerId: string) {
   await db.customer.delete({ where: { id: customerId } });
 }
+
+export async function authenticateCourier(emailRaw: string, password: string, ip = "unknown") {
+  const email = emailRaw.trim().toLowerCase();
+  if (!(await rateLimit(`clogin:${ip}`, 20, 900_000))) throw new ServiceError("RATE", "Trop d'essais. Réessayez dans 15 minutes.");
+  const c = await db.courier.findUnique({ where: { email } });
+  if (!c || !c.active || !(await bcrypt.compare(password, c.passwordHash))) throw new ServiceError("AUTH", "E-mail ou mot de passe incorrect.");
+  return c;
+}

@@ -2,44 +2,48 @@ import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
 export function Card({ className = "", ...p }: ComponentProps<"div">) {
-  return <div className={`rounded-2xl border border-line bg-white p-5 shadow-sm ${className}`} {...p} />;
+  return <div className={`rounded-2xl border border-line bg-white p-5 shadow-[0_1px_2px_rgba(16,36,59,0.04)] sm:p-6 ${className}`} {...p} />;
 }
 
 const TONES = {
-  green: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  amber: "bg-amber-50 text-amber-800 ring-amber-200",
-  red: "bg-rose-50 text-rose-800 ring-rose-200",
-  gray: "bg-slate-100 text-slate-700 ring-slate-200",
-  blue: "bg-sky-50 text-sky-800 ring-sky-200",
+  green: "bg-turq-50 text-turq-700 ring-turq/30",
+  amber: "bg-warn-50 text-[#a8611d] ring-warn/30",
+  red: "bg-danger-50 text-danger ring-danger/25",
+  gray: "bg-icy text-muted ring-line-strong",
+  blue: "bg-blue-50 text-blue ring-blue/20",
+  navy: "bg-navy text-white ring-navy",
 };
 export type Tone = keyof typeof TONES;
 
 export function Badge({ tone = "gray", children, title }: { tone?: Tone; children: ReactNode; title?: string }) {
   return (
-    <span title={title} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${TONES[tone]}`}>
+    <span title={title} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${TONES[tone]}`}>
       {children}
     </span>
   );
 }
 
 const BTN = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700",
-  secondary: "border border-line bg-white text-ink hover:bg-brand-50",
-  danger: "border border-rose-200 bg-white text-rose-700 hover:bg-rose-50",
+  primary: "bg-blue text-white shadow-[0_6px_16px_-8px_rgba(23,107,135,0.8)] hover:bg-blue-600",
+  navy: "bg-navy text-white hover:bg-navy-800",
+  secondary: "border border-line-strong bg-white text-navy hover:border-blue hover:text-blue",
+  ghost: "text-blue hover:bg-blue-50",
+  danger: "border border-danger/30 bg-white text-danger hover:bg-danger-50",
 };
+export type ButtonVariant = keyof typeof BTN;
 
-export function buttonClass(variant: keyof typeof BTN = "primary", extra = "") {
-  return `inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60 ${BTN[variant]} ${extra}`;
+export function buttonClass(variant: ButtonVariant = "primary", extra = "") {
+  return `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.98] disabled:opacity-60 ${BTN[variant]} ${extra}`;
 }
 
-export function ButtonLink({ variant = "primary", className = "", ...p }: ComponentProps<typeof Link> & { variant?: keyof typeof BTN }) {
+export function ButtonLink({ variant = "primary", className = "", ...p }: ComponentProps<typeof Link> & { variant?: ButtonVariant }) {
   return <Link className={buttonClass(variant, className)} {...p} />;
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-sm font-medium">{label}</span>
+      <span className="text-sm font-semibold text-navy">{label}</span>
       {children}
       {hint && <span className="block text-xs text-muted">{hint}</span>}
     </label>
@@ -47,7 +51,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 }
 
 export const inputClass =
-  "w-full rounded-xl border border-line bg-white px-3 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+  "w-full min-h-11 rounded-xl border border-line-strong bg-white px-3.5 py-2.5 text-navy placeholder:text-faint outline-none transition focus:border-blue focus:ring-4 focus:ring-blue/10";
 
 export function Input(p: ComponentProps<"input">) {
   return <input {...p} className={`${inputClass} ${p.className ?? ""}`} />;
@@ -76,10 +80,15 @@ export function Honeypot() {
   );
 }
 
-export function PageTitle({ title, subtitle }: { title: string; subtitle?: ReactNode }) {
+export function Eyebrow({ children }: { children: ReactNode }) {
+  return <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue">{children}</p>;
+}
+
+export function PageTitle({ title, subtitle, eyebrow }: { title: string; subtitle?: ReactNode; eyebrow?: string }) {
   return (
-    <div className="mb-6 space-y-1">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
+    <div className="mb-6 space-y-2">
+      {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+      <h1 className="text-2xl font-extrabold tracking-tight text-navy sm:text-3xl">{title}</h1>
       {subtitle && <p className="text-muted">{subtitle}</p>}
     </div>
   );
