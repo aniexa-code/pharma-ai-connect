@@ -3,10 +3,11 @@ import { SignJWT, jwtVerify } from "jose";
 
 export const CUSTOMER_COOKIE = "pac_client";
 export const PHARMACY_COOKIE = "pac_pharmacie";
+export const COURIER_COOKIE = "pac_livreur";
 export const CUSTOMER_MAX_AGE = 60 * 60 * 24 * 30; // 30 jours
 export const PHARMACY_MAX_AGE = 60 * 60 * 12; // 12 h
 
-export type SessionPayload = { uid: string; kind: "CUSTOMER" | "PHARMACY"; pid?: string };
+export type SessionPayload = { uid: string; kind: "CUSTOMER" | "PHARMACY" | "COURIER"; pid?: string };
 
 function secret() {
   const s = process.env.AUTH_SECRET;

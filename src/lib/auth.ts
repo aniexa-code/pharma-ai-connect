@@ -3,7 +3,7 @@ import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "./db";
-import { CUSTOMER_COOKIE, CUSTOMER_MAX_AGE, PHARMACY_COOKIE, PHARMACY_MAX_AGE, signSession, verifySession } from "./session";
+import { COURIER_COOKIE, CUSTOMER_COOKIE, CUSTOMER_MAX_AGE, PHARMACY_COOKIE, PHARMACY_MAX_AGE, signSession, verifySession } from "./session";
 
 /** Client connecté (facultatif) : null pour un visiteur, ce qui ne bloque aucun parcours. */
 export const getCustomer = cache(async () => {
@@ -50,8 +50,24 @@ export async function startPharmacySession(id: string, pharmacyId: string) {
   );
 }
 
-export async function endSession(kind: "CUSTOMER" | "PHARMACY") {
-  (await cookies()).delete(kind === "CUSTOMER" ? CUSTOMER_COOKIE : PHARMACY_COOKIE);
+export const getCourier = cache(async () => {
+  const s = await verifySession((await cookies()).get(COURIER_COOKIE)?.value);
+  if (!s || s.kind !== "COURIER") return null;
+  return db.courier.findFirst({ where: { id: s.uid, active: true } });
+});
+
+export async function requireCourier() {
+  const c = await getCourier();
+  if (!c) redirect("/livreur/connexion");
+  return c;
+}
+
+export async function startCourierSession(id: string) {
+  (await cookies()).set(COURIER_COOKIE, await signSession({ uid: id, kind: "COURIER" }, PHARMACY_MAX_AGE), cookieOpts(PHARMACY_MAX_AGE));
+}
+
+export async function endSession(kind: "CUSTOMER" | "PHARMACY" | "COURIER") {
+  (await cookies()).delete(kind === "CUSTOMER" ? CUSTOMER_COOKIE : kind === "PHARMACY" ? PHARMACY_COOKIE : COURIER_COOKIE);
 }
 
 export async function clientIp() {

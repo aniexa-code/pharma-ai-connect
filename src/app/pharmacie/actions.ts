@@ -71,14 +71,42 @@ export async function respondToRequest(_: FormState, fd: FormData): Promise<Form
   return { info: "Réponse envoyée au client." };
 }
 
-/** Mise à jour rapide d'une disponibilité : horodatée, elle devient « Fiable » pour les visiteurs. */
+/** Réponse en un geste depuis le tableau de bord (Disponible / Indisponible). */
+export async function quickRespond(fd: FormData) {
+  const u = await requirePharmacyUser();
+  const status = fd.get("status") === "CONFIRMED" ? "CONFIRMED" : "UNAVAILABLE";
+  await pharmacyRespond(u.pharmacyId, String(fd.get("requestId")), {
+    status,
+    message: status === "CONFIRMED" ? "Disponible. Vous pouvez commander ou passer à la pharmacie." : "Désolé, ce produit n'est pas disponible pour le moment.",
+  });
+  revalidatePath("/pharmacie");
+}
+
+const STATUSES: StockStatus[] = ["AVAILABLE", "LOW", "OUT"];
+
+/**
+ * Mise à jour du stock : chaque ligne envoyée est confirmée maintenant par la pharmacie,
+ * horodatée, et devient « Disponible / Fiable » pour les visiteurs.
+ */
 export async function updateStock(fd: FormData) {
   const u = await requirePharmacyUser();
-  const status = String(fd.get("status")) as StockStatus;
-  const price = Number(fd.get("price"));
-  await db.stock.updateMany({
-    where: { id: String(fd.get("stockId")), pharmacyId: u.pharmacyId },
-    data: { status, source: "PHARMACY", confirmedAt: new Date(), ...(price > 0 ? { price: Math.round(price) } : {}) },
-  });
+  const now = new Date();
+  for (const id of fd.getAll("stockId").map(String)) {
+    const status = String(fd.get(`status_${id}`)) as StockStatus;
+    if (!STATUSES.includes(status)) continue;
+    const price = Number(fd.get(`price_${id}`));
+    const qtyRaw = String(fd.get(`qty_${id}`) ?? "").trim();
+    const quantity = qtyRaw === "" ? null : Math.max(0, Math.round(Number(qtyRaw)) || 0);
+    await db.stock.updateMany({
+      where: { id, pharmacyId: u.pharmacyId },
+      data: {
+        status: quantity === 0 ? "OUT" : status,
+        quantity,
+        source: "PHARMACY",
+        confirmedAt: now,
+        ...(price > 0 ? { price: Math.round(price) } : {}),
+      },
+    });
+  }
   revalidatePath("/pharmacie");
 }

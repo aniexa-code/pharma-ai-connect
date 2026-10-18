@@ -2,6 +2,7 @@
 import { useActionState, useState } from "react";
 import { ContactFields } from "@/components/ContactFields";
 import { SubmitButton } from "@/components/client";
+import { Icon } from "@/components/brand";
 import { Alert, Field, Honeypot, Input, Select } from "@/components/ui";
 import { placeOrder } from "./actions";
 
@@ -15,7 +16,7 @@ type Props = {
   slots: string[];
   subtotal: string;
   deliveryFee: number;
-  formatTotal: { pickup: string; delivery: string };
+  formatTotal: { pickup: string; delivery: string; fee: string };
   addresses: { id: string; label: string; line: string }[];
   defaults: { name?: string; phone?: string; email?: string; channel?: string };
 };
@@ -32,20 +33,22 @@ export function OrderForm(p: Props) {
       {p.items.map((i) => <input key={i} type="hidden" name="item" value={i} />)}
 
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Mode de réception</legend>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <legend className="mb-2 text-sm font-bold text-navy">Comment récupérer votre médicament ?</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
           {p.pickup && (
-            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-line p-3 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50">
-              <input type="radio" name="fulfillment" value="PICKUP" checked={mode === "PICKUP"} onChange={() => setMode("PICKUP")} />
-              Retrait en pharmacie
+            <label className="relative flex cursor-pointer gap-3 rounded-2xl border border-line p-4 transition has-[:checked]:border-blue has-[:checked]:bg-blue-50/60 has-[:checked]:ring-4 has-[:checked]:ring-blue/10">
+              <input type="radio" name="fulfillment" value="PICKUP" checked={mode === "PICKUP"} onChange={() => setMode("PICKUP")} className="sr-only" />
+              <Icon name="store" size={22} className="mt-0.5 text-blue" />
+              <span><span className="block font-bold text-navy">Retrait en pharmacie</span><span className="text-xs text-muted">Gratuit · code de retrait</span></span>
             </label>
           )}
-          <label className={`flex items-center gap-2 rounded-xl border border-line p-3 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50 ${canDeliver ? "cursor-pointer" : "opacity-50"}`}>
-            <input type="radio" name="fulfillment" value="DELIVERY" disabled={!canDeliver} checked={mode === "DELIVERY"} onChange={() => setMode("DELIVERY")} />
-            Livraison {p.delivery ? "" : "(non proposée)"}
+          <label className={`relative flex gap-3 rounded-2xl border border-line p-4 transition has-[:checked]:border-blue has-[:checked]:bg-blue-50/60 has-[:checked]:ring-4 has-[:checked]:ring-blue/10 ${canDeliver ? "cursor-pointer" : "opacity-50"}`}>
+            <input type="radio" name="fulfillment" value="DELIVERY" disabled={!canDeliver} checked={mode === "DELIVERY"} onChange={() => setMode("DELIVERY")} className="sr-only" />
+            <Icon name="truck" size={22} className="mt-0.5 text-blue" />
+            <span><span className="block font-bold text-navy">Livraison</span><span className="text-xs text-muted">{p.delivery ? `${p.formatTotal.fee} · code de remise` : "Non proposée par cette pharmacie"}</span></span>
           </label>
         </div>
-        {p.prescription && <p className="text-xs text-amber-700">Produit sur ordonnance : retrait en pharmacie uniquement, ordonnance originale vérifiée au comptoir.</p>}
+        {p.prescription && <p className="text-xs font-semibold text-[#a8611d]">Produit sur ordonnance : retrait en pharmacie uniquement, ordonnance originale vérifiée au comptoir.</p>}
       </fieldset>
 
       {mode === "DELIVERY" && (
@@ -76,23 +79,26 @@ export function OrderForm(p: Props) {
       <ContactFields phoneRequired defaults={p.defaults} />
 
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Paiement</legend>
-        {p.methods.map((m, i) => (
-          <label key={m.value} className="flex cursor-pointer items-center gap-2 rounded-xl border border-line p-3 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50">
-            <input type="radio" name="paymentMethod" value={m.value} defaultChecked={i === 0} />
-            {m.label}
-          </label>
-        ))}
+        <legend className="mb-2 text-sm font-bold text-navy">Paiement</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {p.methods.map((m, i) => (
+            <label key={m.value} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-line px-3 text-sm font-semibold text-navy transition has-[:checked]:border-blue has-[:checked]:bg-blue-50/60">
+              <input type="radio" name="paymentMethod" value={m.value} defaultChecked={i === 0} className="accent-[#176B87]" />
+              {m.label}
+            </label>
+          ))}
+        </div>
         {p.prescription && <p className="text-xs text-muted">Le paiement en ligne ne sera demandé qu'après validation par le pharmacien.</p>}
       </fieldset>
 
-      <div className="flex items-center justify-between rounded-xl bg-surface p-3 font-semibold">
-        <span>Total</span>
-        <span>{mode === "DELIVERY" ? p.formatTotal.delivery : p.formatTotal.pickup}</span>
+      <div className="space-y-1 rounded-2xl bg-navy p-4 text-white">
+        <p className="flex justify-between text-sm text-white/70"><span>Mode</span><span>{mode === "DELIVERY" ? "Livraison" : "Retrait en pharmacie"}</span></p>
+        {mode === "DELIVERY" && <p className="flex justify-between text-sm text-white/70"><span>Frais de livraison</span><span>{p.formatTotal.fee}</span></p>}
+        <p className="flex items-end justify-between pt-1"><span className="font-semibold">Total</span><span className="text-2xl font-extrabold text-turq" data-testid="order-total">{mode === "DELIVERY" ? p.formatTotal.delivery : p.formatTotal.pickup}</span></p>
       </div>
 
       <Alert>{state.error}</Alert>
-      <SubmitButton className="w-full">Valider la commande</SubmitButton>
+      <SubmitButton className="w-full min-h-12 text-base">Confirmer la demande</SubmitButton>
       <p className="text-xs text-muted">Aucun mot de passe ni compte demandé. Vos coordonnées servent uniquement au traitement de cette commande.</p>
     </form>
   );

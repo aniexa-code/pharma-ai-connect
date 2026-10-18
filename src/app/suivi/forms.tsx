@@ -11,14 +11,14 @@ export function RecoveryForm() {
   if (state.step !== "code")
     return (
       <form action={ask} className="space-y-4">
-        <Field label="Référence de commande" hint="Ex. CMD-7KQ2-M9XD, indiquée dans le message de confirmation.">
+        <Field label="Entrez votre référence de commande" hint="Ex. CMD-7KQ2-M9XD, indiquée dans le message de confirmation.">
           <Input name="ref" required placeholder="CMD-XXXX-XXXX" className="font-mono uppercase" />
         </Field>
         <Field label="Téléphone utilisé pour la commande">
           <Input name="phone" type="tel" required placeholder="+242 06 123 45 67" />
         </Field>
         <Alert>{asked.error}</Alert>
-        <SubmitButton>Recevoir un code</SubmitButton>
+        <SubmitButton className="w-full">Recevoir mon code de suivi</SubmitButton>
       </form>
     );
   return (
@@ -30,7 +30,7 @@ export function RecoveryForm() {
           Mode démonstration : aucun fournisseur SMS n'est configuré, le code est donc affiché ici : <strong className="font-mono" data-testid="demo-code">{asked.demoCode}</strong>
         </Alert>
       )}
-      <Field label="Code reçu (6 chiffres)">
+      <Field label="Code de suivi (6 chiffres)">
         <Input name="code" inputMode="numeric" pattern="\d{6}" required className="font-mono tracking-widest" />
       </Field>
       <Alert>{confirmed.error}</Alert>

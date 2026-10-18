@@ -301,8 +301,13 @@ export async function customerCancel(orderId: string) {
  * Remise au client : le code n'est valable qu'une fois et seulement pour cette opération.
  * Cinq essais faux bloquent la remise ; la pharmacie doit alors régénérer un code.
  */
-export async function completeHandover(pharmacyId: string, orderId: string, code: string) {
-  const order = await loadForPharmacy(pharmacyId, orderId);
+export async function completeHandover(pharmacyId: string | { courierId: string }, orderId: string, code: string) {
+  const order =
+    typeof pharmacyId === "string"
+      ? await loadForPharmacy(pharmacyId, orderId)
+      : await db.order.findFirst({ where: { id: orderId, courierId: pharmacyId.courierId }, include: { payments: true } });
+  if (!order) throw new ServiceError("NOT_FOUND", "Commande introuvable.");
+  const actor = typeof pharmacyId === "string" ? "PHARMACY" : "COURIER";
   const expected: OrderStatus = order.fulfillment === "PICKUP" ? "READY_FOR_PICKUP" : "OUT_FOR_DELIVERY";
   if (order.status !== expected) throw new ServiceError("TRANSITION", "La commande n'est pas prête à être remise.");
   if (order.handoverCodeUsedAt) throw new ServiceError("USED", "Ce code a déjà été utilisé.");
@@ -318,7 +323,7 @@ export async function completeHandover(pharmacyId: string, orderId: string, code
     throw new ServiceError("UNPAID", "Le paiement en ligne n'est pas confirmé.");
   // Paiement à la remise : encaissé à cet instant.
   await db.payment.updateMany({ where: { orderId: order.id, method: "CASH", status: "PENDING" }, data: { status: "CONFIRMED" } });
-  return setStatus(order.id, order.fulfillment === "PICKUP" ? "COLLECTED" : "DELIVERED", "PHARMACY", null, {
+  return setStatus(order.id, order.fulfillment === "PICKUP" ? "COLLECTED" : "DELIVERED", actor, null, {
     handoverCodeUsedAt: new Date(),
   });
 }
@@ -386,4 +391,43 @@ export async function addOrderMessage(orderId: string, author: "CUSTOMER" | "PHA
     const o = await db.order.findUniqueOrThrow({ where: { id: orderId } });
     await notifyOrder(o, "PHARMACY_MESSAGE", `La pharmacie vous a écrit au sujet de votre commande ${o.publicRef}.`);
   }
+}
+
+// ---------- Livreurs ----------
+
+const OPEN_FOR_COURIERS: OrderStatus[] = ["CONFIRMED", "PREPARING"];
+
+/** Missions libres : commandes à livrer, confirmées par la pharmacie, sans livreur. */
+export function openMissions() {
+  return db.order.findMany({
+    where: { fulfillment: "DELIVERY", courierId: null, status: { in: OPEN_FOR_COURIERS } },
+    include: { pharmacy: true },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+/** Acceptation d'une mission : un seul livreur peut l'obtenir, même en cas de clics simultanés. */
+export async function courierAccept(courierId: string, orderId: string) {
+  const courier = await db.courier.findFirst({ where: { id: courierId, active: true } });
+  if (!courier) throw new ServiceError("AUTH", "Compte livreur inactif.");
+  const { count } = await db.order.updateMany({
+    where: { id: orderId, fulfillment: "DELIVERY", courierId: null, status: { in: OPEN_FOR_COURIERS } },
+    data: { courierId },
+  });
+  if (!count) throw new ServiceError("TAKEN", "Cette mission n'est plus disponible.");
+  return setStatus(orderId, "COURIER_ASSIGNED", "COURIER", null, { courierName: courier.name });
+}
+
+const COURIER_NEXT: Partial<Record<OrderStatus, OrderStatus>> = { COURIER_ASSIGNED: "PICKED_UP", PICKED_UP: "OUT_FOR_DELIVERY" };
+
+export async function courierAdvance(courierId: string, orderId: string) {
+  const o = await db.order.findFirst({ where: { id: orderId, courierId } });
+  if (!o) throw new ServiceError("NOT_FOUND", "Mission introuvable.");
+  const next = COURIER_NEXT[o.status];
+  if (!next) throw new ServiceError("TRANSITION", "Aucune étape suivante pour cette mission.");
+  return setStatus(o.id, next, "COURIER");
+}
+
+export function missionLabel(missionNo: number) {
+  return `PA-${String(missionNo).padStart(4, "0")}`;
 }

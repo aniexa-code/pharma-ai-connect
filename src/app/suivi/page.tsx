@@ -8,7 +8,8 @@ export default function TrackingHome() {
   return (
     <div className="mx-auto max-w-lg">
       <PageTitle
-        title="Suivre une commande"
+        eyebrow="Sans compte"
+        title="Suivre ma demande"
         subtitle="Le plus simple : ouvrez le lien de suivi reçu après votre commande. Lien perdu ? Recevez un code sur le contact utilisé pour la commande."
       />
       <Card><RecoveryForm /></Card>

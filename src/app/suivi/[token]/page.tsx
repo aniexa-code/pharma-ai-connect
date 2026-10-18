@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderStatusBadge, formatDate } from "@/components/badges";
-import { AccountPrompt, CopyButton, SubmitButton } from "@/components/client";
-import { ContactLinks } from "@/components/PharmacyCard";
+import { AccountPrompt, AutoRefresh, CopyButton, SubmitButton } from "@/components/client";
+import { Icon } from "@/components/brand";
+import { OrderTimeline } from "@/components/progress";
+import { ContactLinks } from "@/components/ContactLinks";
 import { NotificationList, Thread } from "@/components/Thread";
-import { Alert, Badge, ButtonLink, Card } from "@/components/ui";
+import { Alert, Badge, ButtonLink, Card, Eyebrow } from "@/components/ui";
 import { getCustomer } from "@/lib/auth";
 import { formatMoney } from "@/lib/config";
 import { CHANNEL_LABEL } from "@/lib/notify";
@@ -36,33 +38,50 @@ export default async function TrackingPage({ params, searchParams }: { params: P
       {sp.paye && <Alert tone="green">Paiement confirmé.</Alert>}
       {sp.lien && <Alert tone="blue">Nouveau lien de suivi créé : l'ancien ne fonctionne plus. Enregistrez celui-ci.</Alert>}
 
-      <Card className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted">Commande <strong className="font-mono text-ink" data-testid="order-ref">{o.publicRef}</strong></p>
-          <span data-testid="order-status"><OrderStatusBadge status={o.status} /></span>
-        </div>
-        <div>
-          <h1 className="text-xl font-bold">{pickup ? "Retrait en pharmacie" : "Livraison"} · {o.slot}</h1>
-          <p className="text-sm text-muted">{o.pharmacy.name} · {o.pharmacy.address}, {o.pharmacy.district}</p>
-          <ContactLinks phone={o.pharmacy.phone} whatsapp={o.pharmacy.whatsapp} />
+      <Card className="space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <Eyebrow>Suivi de commande</Eyebrow>
+            <p className="font-mono text-2xl font-bold tracking-wide text-navy" data-testid="order-ref">{o.publicRef}</p>
+            <p className="text-sm text-muted">{pickup ? "Retrait en pharmacie" : "Livraison"} · {o.slot}</p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <span data-testid="order-status"><OrderStatusBadge status={o.status} /></span>
+            {!isFinal(o.status) && <AutoRefresh />}
+          </div>
         </div>
 
-        {code && !isFinal(o.status) && (
-          <div className="rounded-xl border-2 border-dashed border-brand-500 bg-brand-50 p-4 text-center">
-            <p className="text-sm">Code de {pickup ? "retrait" : "remise"}, à donner uniquement {pickup ? "au comptoir" : "au livreur, à la réception"}</p>
-            <p className="font-mono text-3xl font-bold tracking-[0.3em]" data-testid="handover-code">{code}</p>
-            <p className="text-xs text-muted">Valable une seule fois, pour cette commande uniquement.</p>
+        <div className="grid gap-6 md:grid-cols-[1.1fr_1fr]">
+          <OrderTimeline
+            status={o.status}
+            fulfillment={o.fulfillment}
+            events={o.events}
+            createdAt={o.createdAt}
+            detail={o.status === "PRESCRIPTION_REVIEW" ? "Un pharmacien vérifie votre demande." : o.status === "AWAITING_PAYMENT" ? "En attente de votre paiement." : o.courierName && !isFinal(o.status) ? `Livreur : ${o.courierName}` : null}
+          />
+          <div className="space-y-4">
+            {code && !isFinal(o.status) && (
+              <div className="relative overflow-hidden rounded-2xl bg-navy p-5 text-center text-white">
+                <div className="tech-grid absolute inset-0 opacity-30 invert" />
+                <p className="relative text-xs font-semibold text-white/70">Code de {pickup ? "retrait" : "remise"}, à donner uniquement {pickup ? "au comptoir" : "au livreur, à la réception"}</p>
+                <p className="relative mt-2 font-mono text-4xl font-bold tracking-[0.3em] text-turq" data-testid="handover-code">{code}</p>
+                <p className="relative mt-2 text-[11px] text-white/60">Valable une seule fois, pour cette commande uniquement.</p>
+              </div>
+            )}
+            {o.status === "AWAITING_PAYMENT" && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-warn-50 p-4">
+                <span className="text-sm font-semibold text-navy">Paiement en attente</span>
+                <ButtonLink href={`/suivi/${token}/paiement`}>Payer maintenant</ButtonLink>
+              </div>
+            )}
+            {o.status === "PRESCRIPTION_REVIEW" && <Alert tone="amber">Pensez à apporter l'ordonnance originale au retrait.</Alert>}
+            <div className="rounded-2xl border border-line p-4">
+              <p className="flex items-center gap-2 font-bold text-navy"><Icon name="store" size={18} className="text-blue" />{o.pharmacy.name}</p>
+              <p className="mb-3 mt-0.5 text-xs text-muted">{o.pharmacy.address}, {o.pharmacy.district}</p>
+              <ContactLinks phone={o.pharmacy.phone} whatsapp={o.pharmacy.whatsapp} lat={o.pharmacy.lat} lng={o.pharmacy.lng} />
+            </div>
           </div>
-        )}
-        {o.status === "PRESCRIPTION_REVIEW" && (
-          <Alert tone="amber">Un pharmacien vérifie votre demande. Vous serez notifié dès sa validation. Pensez à apporter l'ordonnance originale au retrait.</Alert>
-        )}
-        {o.status === "AWAITING_PAYMENT" && (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 p-3">
-            <span className="text-sm">Paiement en attente.</span>
-            <ButtonLink href={`/suivi/${token}/paiement`}>Payer maintenant</ButtonLink>
-          </div>
-        )}
+        </div>
       </Card>
 
       {sp.nouvelle && !customer && (
@@ -78,22 +97,9 @@ export default async function TrackingPage({ params, searchParams }: { params: P
         </Card>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6">
         <Card className="space-y-3">
-          <h2 className="font-semibold">Suivi</h2>
-          <ol className="space-y-3 border-l-2 border-line pl-4" data-testid="timeline">
-            {o.events.map((e) => (
-              <li key={e.id}>
-                <p className="text-sm font-medium">{STATUS_LABEL[e.status]}</p>
-                <p className="text-xs text-muted">{formatDate(e.createdAt)}{e.note ? ` · ${e.note}` : ""}</p>
-              </li>
-            ))}
-          </ol>
-          {o.courierName && <p className="text-sm">Livreur : <strong>{o.courierName}</strong></p>}
-        </Card>
-
-        <Card className="space-y-3">
-          <h2 className="font-semibold">Détail</h2>
+          <h2 className="font-bold text-navy">Détail</h2>
           <ul className="space-y-1 text-sm">
             {o.items.map((i) => (
               <li key={i.id} className="flex justify-between gap-3"><span>{i.productName} × {i.quantity}</span><span>{formatMoney(i.unitPrice * i.quantity, o.currency)}</span></li>
@@ -114,18 +120,18 @@ export default async function TrackingPage({ params, searchParams }: { params: P
       </div>
 
       <Card className="space-y-4">
-        <h2 className="font-semibold">Échanger avec la pharmacie</h2>
+        <h2 className="font-bold text-navy">Échanger avec la pharmacie</h2>
         <Thread messages={o.messages} />
         {!isFinal(o.status) && <OrderMessageForm token={token} />}
       </Card>
 
       <Card className="space-y-3">
-        <h2 className="font-semibold">Notifications</h2>
+        <h2 className="font-bold text-navy">Notifications</h2>
         <NotificationList items={o.notifications} />
       </Card>
 
       <Card className="space-y-3">
-        <h2 className="font-semibold">Ce lien</h2>
+        <h2 className="font-bold text-navy">Ce lien</h2>
         <p className="text-sm text-muted">
           Toute personne qui possède ce lien peut voir cette commande. Ne le partagez qu'avec quelqu'un de confiance (par exemple la personne qui récupère la commande).
           Valable jusqu'au {formatDate(o.trackingExpiresAt)}.
