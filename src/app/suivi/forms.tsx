@@ -2,7 +2,7 @@
 import { useActionState, useState } from "react";
 import { SubmitButton } from "@/components/client";
 import { Alert, Field, Input, Select, Textarea } from "@/components/ui";
-import { askRecoveryCode, confirmOrder, confirmRecoveryCode, createAccountAfterOrder, sendOrderMessage } from "./actions";
+import { askRecoveryCode, closeOrder, confirmOrder, confirmRecoveryCode, createAccountAfterOrder, sendOrderMessage } from "./actions";
 
 export function RecoveryForm() {
   const [asked, ask] = useActionState(askRecoveryCode, {});
@@ -141,5 +141,34 @@ export function ConfirmOrderForm(p: ConfirmProps) {
         <SubmitButton className="min-h-12 w-full text-base">Je confirme ma commande</SubmitButton>
       )}
     </form>
+  );
+}
+
+export function CloseOrderForm({ token, pickup }: { token: string; pickup: boolean }) {
+  const [state, action] = useActionState(closeOrder, {});
+  const [problem, setProblem] = useState(false);
+  if (state.info) return <Alert tone="green">{state.info}</Alert>;
+  return (
+    <div className="space-y-3" data-testid="close-form">
+      {!problem ? (
+        <form action={action} className="flex flex-wrap gap-2">
+          <input type="hidden" name="token" value={token} />
+          <input type="hidden" name="received" value="1" />
+          <SubmitButton>J'ai bien reçu ma commande</SubmitButton>
+          <button type="button" onClick={() => setProblem(true)} className="min-h-11 px-3 text-sm font-semibold text-danger hover:underline">Signaler un problème</button>
+        </form>
+      ) : (
+        <form action={action} className="space-y-2">
+          <input type="hidden" name="token" value={token} />
+          <input type="hidden" name="received" value="0" />
+          <Textarea name="note" rows={3} required maxLength={1000} placeholder={pickup ? "Ex. un produit manquait dans le sachet" : "Ex. colis incomplet, produit abîmé"} />
+          <div className="flex flex-wrap gap-2">
+            <SubmitButton variant="danger">Envoyer le signalement</SubmitButton>
+            <button type="button" onClick={() => setProblem(false)} className="min-h-11 px-3 text-sm font-semibold text-muted">Annuler</button>
+          </div>
+        </form>
+      )}
+      <Alert>{state.error}</Alert>
+    </div>
   );
 }

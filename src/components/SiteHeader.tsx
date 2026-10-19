@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { getCustomer } from "@/lib/auth";
-import { Logo } from "./brand";
+import { readCart } from "@/lib/cart";
+import { Icon, Logo } from "./brand";
 import { BottomNav, DesktopNav } from "./Nav";
 import { buttonClass } from "./ui";
 
 export async function SiteHeader() {
   const customer = await getCustomer();
+  const cartCount = (await readCart()).reduce((n, l) => n + l.quantity, 0);
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-line/80 bg-white/80 backdrop-blur-xl">
@@ -13,6 +15,10 @@ export async function SiteHeader() {
           <Link href="/" aria-label="Pharma AI Connect, accueil"><Logo compact /></Link>
           <DesktopNav />
           <div className="flex items-center gap-2">
+            <Link href="/panier" aria-label={`Panier${cartCount ? ` : ${cartCount} article${cartCount > 1 ? "s" : ""}` : ""}`} className="relative grid h-9 w-9 place-items-center rounded-xl text-navy hover:bg-icy" data-testid="cart-link">
+              <Icon name="bag" size={20} />
+              {cartCount > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-turq px-1 text-[10px] font-extrabold text-navy">{cartCount}</span>}
+            </Link>
             <Link href="/pharmacie" className="hidden rounded-lg px-3 py-2 text-xs font-semibold text-muted hover:text-navy sm:inline">Espace pharmacie</Link>
             {customer ? (
               <Link href="/compte" className={buttonClass("secondary", "min-h-9 py-1.5")}>Mon compte</Link>

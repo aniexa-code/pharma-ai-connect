@@ -150,7 +150,7 @@ export type CreatedOrder = { order: Order; token: string; handoverCode: string }
 
 export async function createGuestOrder(
   raw: OrderInput,
-  ctx: { ip?: string; customerId?: string | null; requestId?: string | null; honeypot?: string } = {},
+  ctx: { ip?: string; customerId?: string | null; requestId?: string | null; honeypot?: string; checkoutId?: string } = {},
 ): Promise<CreatedOrder> {
   // Champ piège invisible : un robot qui le remplit est ignoré.
   if (ctx.honeypot) throw new ServiceError("BOT", "Commande refusée.");
@@ -159,11 +159,14 @@ export async function createGuestOrder(
   const input = parsed.data;
 
   // Protection contre les commandes en rafale (par appareil et par numéro).
+  // Un panier validé est limité une fois pour toutes ses commandes (voir checkout.ts).
   const fp = ctx.ip ? ipFingerprint(ctx.ip) : null;
-  if (fp && !(await rateLimit(`order:ip:${fp}`, 10, 3600_000)))
-    throw new ServiceError("RATE", "Trop de commandes depuis cet appareil. Réessayez plus tard ou appelez la pharmacie.");
-  if (!(await rateLimit(`order:phone:${input.phone}`, 5, 3600_000)))
-    throw new ServiceError("RATE", "Trop de commandes pour ce numéro en peu de temps. Réessayez plus tard.");
+  if (!ctx.checkoutId) {
+    if (fp && !(await rateLimit(`order:ip:${fp}`, 10, 3600_000)))
+      throw new ServiceError("RATE", "Trop de commandes depuis cet appareil. Réessayez plus tard ou appelez la pharmacie.");
+    if (!(await rateLimit(`order:phone:${input.phone}`, 5, 3600_000)))
+      throw new ServiceError("RATE", "Trop de commandes pour ce numéro en peu de temps. Réessayez plus tard.");
+  }
 
   const pharmacy = await db.pharmacy.findFirst({ where: { id: input.pharmacyId, active: true } });
   if (!pharmacy) throw new ServiceError("PHARMACY", "Cette pharmacie n'accepte pas de commande en ligne pour le moment.");
@@ -228,6 +231,7 @@ export async function createGuestOrder(
       trackingTokenHash: hashToken(token),
       trackingNonce,
       paymentPreference: input.paymentMethod,
+      checkoutId: ctx.checkoutId ?? null,
       trackingExpiresAt: new Date(Date.now() + TTL.tracking),
       handoverNonce: nonce,
       requestId: ctx.requestId ?? null,
@@ -311,7 +315,11 @@ export async function pharmacyAdvance(
   if (next === "COURIER_ASSIGNED" && !opts.courierName?.trim())
     throw new ServiceError("COURIER", "Indiquez le nom du livreur.");
   if (next === "CANCELLED") await refundIfPaid(order.id);
-  return setStatus(order.id, next, "PHARMACY", opts.note, next === "COURIER_ASSIGNED" ? { courierName: opts.courierName!.trim() } : {});
+  return setStatus(order.id, next, "PHARMACY", opts.note, {
+    ...(next === "COURIER_ASSIGNED" ? { courierName: opts.courierName!.trim() } : {}),
+    // La pharmacie remet elle-même la commande à son propre livreur : sa part est close.
+    ...(next === "PICKED_UP" ? { pharmacyClosedAt: new Date() } : {}),
+  });
 }
 
 /** Validation de l'ordonnance (ou refus) par le pharmacien, avant tout paiement. */
@@ -506,9 +514,14 @@ export async function completeHandover(pharmacyId: string | { courierId: string 
     throw new ServiceError("UNPAID", "Le paiement en ligne n'est pas confirmé.");
   // Paiement à la remise : encaissé à cet instant.
   await db.payment.updateMany({ where: { orderId: order.id, method: "CASH", status: "PENDING" }, data: { status: "CONFIRMED" } });
-  return setStatus(order.id, order.fulfillment === "PICKUP" ? "COLLECTED" : "DELIVERED", actor, null, {
-    handoverCodeUsedAt: new Date(),
+  const now = new Date();
+  // La validation du code vaut clôture pour celui qui remet la commande (pharmacie au comptoir, ou livreur).
+  const done = await setStatus(order.id, order.fulfillment === "PICKUP" ? "COLLECTED" : "DELIVERED", actor, null, {
+    handoverCodeUsedAt: now,
+    ...(actor === "PHARMACY" ? { pharmacyClosedAt: order.pharmacyClosedAt ?? now } : { courierClosedAt: now }),
   });
+  await notifyOrder(done, "CLOSE_REQUEST", `Avez-vous bien reçu votre commande ${done.publicRef} ? Confirmez-le, ou signalez un problème, depuis votre lien de suivi.`);
+  return done;
 }
 
 /** Nouveau code de remise (ex. client bloqué après plusieurs essais) : l'ancien cesse de fonctionner. */
@@ -562,6 +575,60 @@ export async function retryPayment(orderId: string, method: "CASH" | "MOBILE_MON
   return payment;
 }
 
+// ---------- Clôture par toutes les parties ----------
+
+/** Parties qui doivent clôturer la commande : pharmacie, livreur (s'il y en a un sur la plateforme) et client. */
+export function closureParties(o: Pick<Order, "courierId" | "pharmacyClosedAt" | "courierClosedAt" | "customerClosedAt">) {
+  return [
+    { key: "pharmacy", label: "Pharmacie", at: o.pharmacyClosedAt },
+    ...(o.courierId ? [{ key: "courier", label: "Livreur", at: o.courierClosedAt }] : []),
+    { key: "customer", label: "Client", at: o.customerClosedAt },
+  ];
+}
+
+async function tryClose(orderId: string) {
+  const o = await db.order.findUniqueOrThrow({ where: { id: orderId } });
+  if (o.closedAt || !["DELIVERED", "COLLECTED"].includes(o.status)) return o;
+  if (closureParties(o).some((p) => !p.at)) return o;
+  const { count } = await db.order.updateMany({ where: { id: o.id, closedAt: null }, data: { closedAt: new Date() } });
+  if (count) await db.orderEvent.create({ data: { orderId: o.id, status: o.status, actor: "SYSTEM", note: "Commande clôturée par toutes les parties." } });
+  return db.order.findUniqueOrThrow({ where: { id: orderId } });
+}
+
+/** La pharmacie confirme avoir remis la commande au livreur de la plateforme (double validation de la prise en charge). */
+export async function pharmacyHandToCourier(pharmacyId: string, orderId: string) {
+  const o = await loadForPharmacy(pharmacyId, orderId);
+  if (!o.courierId || !["COURIER_ASSIGNED", "PICKED_UP"].includes(o.status)) throw new ServiceError("TRANSITION", "Aucun livreur n'attend cette commande.");
+  if (o.pharmacyClosedAt) return o;
+  await db.$transaction([
+    db.order.update({ where: { id: o.id }, data: { pharmacyClosedAt: new Date() } }),
+    db.orderEvent.create({ data: { orderId: o.id, status: o.status, actor: "PHARMACY", note: "Commande remise au livreur." } }),
+  ]);
+  return tryClose(o.id);
+}
+
+/** Le client clôture sa part : réception confirmée, ou problème signalé (la commande reste alors ouverte). */
+export async function customerClose(orderId: string, received: boolean, note?: string) {
+  const o = await db.order.findUniqueOrThrow({ where: { id: orderId } });
+  if (!["DELIVERED", "COLLECTED"].includes(o.status)) throw new ServiceError("TRANSITION", "La commande ne vous a pas encore été remise.");
+  if (o.customerClosedAt) throw new ServiceError("TRANSITION", "Vous avez déjà clôturé cette commande.");
+  if (!received) {
+    const text = note?.trim().slice(0, 1000);
+    if (!text) throw new ServiceError("INVALID", "Décrivez le problème rencontré.");
+    await db.$transaction([
+      db.order.update({ where: { id: o.id }, data: { customerIssue: text } }),
+      db.orderEvent.create({ data: { orderId: o.id, status: o.status, actor: "CUSTOMER", note: `Problème signalé : ${text}` } }),
+      db.message.create({ data: { orderId: o.id, author: "CUSTOMER", body: `Problème signalé à la réception : ${text}` } }),
+    ]);
+    return o;
+  }
+  await db.$transaction([
+    db.order.update({ where: { id: o.id }, data: { customerClosedAt: new Date() } }),
+    db.orderEvent.create({ data: { orderId: o.id, status: o.status, actor: "CUSTOMER", note: "Réception confirmée par le client." } }),
+  ]);
+  return tryClose(o.id);
+}
+
 export function isFinal(status: OrderStatus) {
   return FINAL.includes(status);
 }
@@ -610,6 +677,8 @@ export async function courierAdvance(courierId: string, orderId: string) {
   if (!o) throw new ServiceError("NOT_FOUND", "Mission introuvable.");
   const next = COURIER_NEXT[o.status];
   if (!next) throw new ServiceError("TRANSITION", "Aucune étape suivante pour cette mission.");
+  if (next === "OUT_FOR_DELIVERY" && !o.pharmacyClosedAt)
+    throw new ServiceError("HANDOFF", "La pharmacie doit d'abord confirmer qu'elle vous a remis la commande.");
   return setStatus(o.id, next, "COURIER");
 }
 

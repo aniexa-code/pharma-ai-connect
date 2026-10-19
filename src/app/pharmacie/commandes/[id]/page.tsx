@@ -7,7 +7,7 @@ import { Alert, Badge, ButtonLink, Card, Input, Textarea } from "@/components/ui
 import { requirePharmacyUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/config";
 import { db } from "@/lib/db";
-import { ANSWER_LABEL, METHOD_LABEL, MODE_LABEL, PAYMENT_LABEL, STATUS_LABEL, allowedNext, responsibleFor } from "@/lib/services/orders";
+import { ANSWER_LABEL, METHOD_LABEL, MODE_LABEL, PAYMENT_LABEL, STATUS_LABEL, allowedNext, closureParties, responsibleFor } from "@/lib/services/orders";
 import { OrderActionForm, VerifyOrderForm } from "../../forms";
 
 export const metadata: Metadata = { title: "Commande", robots: { index: false } };
@@ -86,6 +86,26 @@ export default async function PharmacyOrder({ params }: { params: Promise<{ id: 
           />
         )}
         {o.status === "AWAITING_CUSTOMER" && <Alert tone="blue">Réponse envoyée : en attente de la confirmation du client.</Alert>}
+        {o.courierId && ["COURIER_ASSIGNED", "PICKED_UP"].includes(o.status) && !o.pharmacyClosedAt && (
+          <OrderActionForm orderId={o.id} action="handoff" className="flex flex-wrap items-center gap-3 rounded-xl bg-blue-50 p-3">
+            <span className="text-sm text-navy">Le livreur {o.courierName} vient chercher la commande. Confirmez quand vous la lui avez remise.</span>
+            <SubmitButton>Confirmer la remise au livreur</SubmitButton>
+          </OrderActionForm>
+        )}
+        {o.courierId && o.pharmacyClosedAt && ["PICKED_UP", "OUT_FOR_DELIVERY"].includes(o.status) && (
+          <Alert tone="green"><span data-testid="handed-off">Remise au livreur confirmée le {formatDate(o.pharmacyClosedAt)}.</span></Alert>
+        )}
+        {["DELIVERED", "COLLECTED"].includes(o.status) && (
+          <div className="space-y-2" data-testid="closure">
+            <p className="text-sm font-semibold text-navy">{o.closedAt ? `Commande clôturée le ${formatDate(o.closedAt)}` : "Clôture en attente"}</p>
+            <ul className="flex flex-wrap gap-2 text-xs">
+              {closureParties(o).map((p) => (
+                <li key={p.key} className={`rounded-full px-3 py-1 font-semibold ${p.at ? "bg-turq-50 text-turq-700" : "bg-warn-50 text-[#a8611d]"}`}>{p.label} : {p.at ? "clôturé" : "en attente"}</li>
+              ))}
+            </ul>
+            {o.customerIssue && !o.customerClosedAt && <Alert tone="amber">Problème signalé par le client : {o.customerIssue}</Alert>}
+          </div>
+        )}
         {o.status === "PRESCRIPTION_REVIEW" && (
           <div className="space-y-2">
             <Alert tone="amber">Validez la demande au regard du produit et du client. L'ordonnance originale sera vérifiée à la remise.</Alert>

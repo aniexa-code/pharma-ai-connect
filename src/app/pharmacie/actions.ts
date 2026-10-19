@@ -6,7 +6,7 @@ import { clientIp, endSession, requirePharmacyUser, startPharmacySession } from 
 import { db } from "@/lib/db";
 import { publicMessage } from "@/lib/errors";
 import { authenticatePharmacyUser } from "@/lib/services/accounts";
-import { addOrderMessage, completeHandover, pharmacyAdvance, regenerateHandoverCode, reviewPrescription, verifyOrder, type ItemCheck } from "@/lib/services/orders";
+import { addOrderMessage, completeHandover, pharmacyAdvance, pharmacyHandToCourier, regenerateHandoverCode, reviewPrescription, verifyOrder, type ItemCheck } from "@/lib/services/orders";
 import { confirmHours, declareDuty, endDuty } from "@/lib/services/pharmacies";
 import { addStockItem, analyzeImport, cancelImport, publishImport, removeStockItem } from "@/lib/services/stock";
 import { pharmacyRespond } from "@/lib/services/requests";
@@ -44,6 +44,7 @@ export async function orderAction(_: FormState, fd: FormData): Promise<FormState
     else if (action === "approve") await reviewPrescription(u.pharmacyId, orderId, true);
     else if (action === "reject") await reviewPrescription(u.pharmacyId, orderId, false, String(fd.get("note") ?? "") || undefined);
     else if (action === "handover") await completeHandover(u.pharmacyId, orderId, String(fd.get("code") ?? ""));
+    else if (action === "handoff") await pharmacyHandToCourier(u.pharmacyId, orderId);
     else if (action === "regenerate") {
       await db.order.findFirstOrThrow({ where: { id: orderId, pharmacyId: u.pharmacyId } });
       await regenerateHandoverCode(orderId);

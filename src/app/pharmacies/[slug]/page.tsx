@@ -8,6 +8,7 @@ import { Badge, ButtonLink, Card, Eyebrow, Input, buttonClass } from "@/componen
 import { getCustomer, requireCustomer } from "@/lib/auth";
 import { availability } from "@/lib/availability";
 import { formatMoney } from "@/lib/config";
+import { addToCart } from "../../panier/actions";
 import { db } from "@/lib/db";
 import { formatDistance } from "@/lib/geo";
 import { hoursLines, isOnDuty, pharmacyOpenStatus, type WeeklyHours } from "@/lib/hours";
@@ -91,6 +92,13 @@ export default async function PharmacyPage({ params, searchParams }: { params: P
               <ButtonLink variant={focusOrderable && focusA.state === "AVAILABLE" ? "secondary" : "primary"} href={`/demande/nouvelle?pharmacie=${p.slug}&produit=${focus.product.slug}`}>
                 <Icon name="check" size={18} />Confirmer avec la pharmacie
               </ButtonLink>
+              {focusOrderable && (
+                <form action={addToCart}>
+                  <input type="hidden" name="pharmacie" value={p.slug} />
+                  <input type="hidden" name="produit" value={focus.productId} />
+                  <button className={buttonClass("secondary")}>Ajouter au panier</button>
+                </form>
+              )}
               {focusOrderable && <ButtonLink href={`/commander?pharmacie=${p.slug}&p=${focus.productId}:1`}><Icon name="bag" size={18} />Commander</ButtonLink>}
             </div>
           </div>
@@ -134,7 +142,10 @@ export default async function PharmacyPage({ params, searchParams }: { params: P
             </ul>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
               <ButtonLink variant="ghost" href={`/demande/nouvelle?pharmacie=${p.slug}&type=question`}><Icon name="chat" size={18} />Écrire à la pharmacie</ButtonLink>
-              <SubmitButton>Commander la sélection</SubmitButton>
+              <div className="flex flex-wrap gap-2">
+                <button formAction={addToCart} className={buttonClass("secondary")}><Icon name="bag" size={18} />Ajouter au panier</button>
+                <SubmitButton>Commander la sélection</SubmitButton>
+              </div>
             </div>
           </form>
         </Card>

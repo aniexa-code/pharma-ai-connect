@@ -73,6 +73,11 @@ export default async function CourierHome() {
                   </li>
                 ))}
               </ol>
+              {o.status === "PICKED_UP" && !o.pharmacyClosedAt && (
+                <p className="rounded-xl bg-warn-50 px-3 py-2 text-sm font-semibold text-[#a8611d]" data-testid="awaiting-handoff">
+                  En attente de la pharmacie : elle doit confirmer vous avoir remis la commande avant le départ.
+                </p>
+              )}
               <div className="grid gap-3 text-sm">
                 <p className="flex gap-3"><Icon name="store" className="text-blue" /><span><span className="block text-xs text-muted">Pharmacie</span><span className="font-bold text-navy">{o.pharmacy.name}</span><br />{o.pharmacy.address}, {o.pharmacy.district}</span></p>
                 <p className="flex gap-3"><Icon name="pin" className="text-blue" /><span><span className="block text-xs text-muted">Destination</span><span className="font-bold text-navy">{o.deliveryAddress}</span>{o.deliveryNotes && <><br />{o.deliveryNotes}</>}<br />{o.contactName} · <a href={`tel:${o.phone}`} className="font-semibold text-blue">{o.phone}</a></span></p>
@@ -89,7 +94,7 @@ export default async function CourierHome() {
                 <a href={o.status === "COURIER_ASSIGNED" ? directionsUrl(o.pharmacy) : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.deliveryAddress ?? "")}`} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary")}>
                   <Icon name="route" size={18} />Itinéraire
                 </a>
-                {NEXT_LABEL[o.status] && (
+                {NEXT_LABEL[o.status] && !(o.status === "PICKED_UP" && !o.pharmacyClosedAt) && (
                   <MissionForm orderId={o.id} action="next"><SubmitButton>{NEXT_LABEL[o.status]}</SubmitButton></MissionForm>
                 )}
               </div>

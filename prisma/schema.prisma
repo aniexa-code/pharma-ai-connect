@@ -382,6 +382,14 @@ model Order {
   allowedModes          FulfillmentMode?
   customerConfirmedAt   DateTime?
   paymentPreference     String?
+  /// Panier validé en une fois : une commande par pharmacie, regroupées.
+  checkoutId            String?
+  /// Clôture obligatoire par chaque partie : pharmacie, livreur (s'il y en a un) et client.
+  pharmacyClosedAt      DateTime?
+  courierClosedAt       DateTime?
+  customerClosedAt      DateTime?
+  closedAt              DateTime?
+  customerIssue         String?
   handoverCodeUsedAt    DateTime?
   handoverAttempts      Int              @default(0)
   requestId             String? // demande de vérification à l'origine de la commande
@@ -401,6 +409,7 @@ model Order {
 
   @@index([pharmacyId, status])
   @@index([customerId])
+  @@index([checkoutId])
 }
 
 model OrderItem {
@@ -521,4 +530,17 @@ model StockImport {
   pharmacy Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 
   @@index([pharmacyId, createdAt])
+}
+
+/**
+ * Panier validé : une commande par pharmacie, suivies ensemble par un lien unique.
+ */
+model Checkout {
+  id                String   @id @default(cuid())
+  publicRef         String   @unique // ex. PAN-7KQ2-M9XD
+  trackingTokenHash String   @unique
+  trackingNonce     String
+  contactName       String
+  phone             String
+  createdAt         DateTime @default(now())
 }

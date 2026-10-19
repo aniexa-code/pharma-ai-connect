@@ -88,6 +88,12 @@ Depuis `/pharmacie/stock`, la pharmacie recherche et filtre son stock, ajoute ou
 
 Le stock numérique n'engage pas la pharmacie. Toute commande commence donc par une vérification physique : pour chaque produit, la pharmacie répond Disponible, Quantité insuffisante (avec la quantité réelle), Indisponible, Nécessite validation du pharmacien ou Autre précision, confirme le prix et indique si elle autorise le retrait, la livraison ou les deux. Le client reçoit une notification avec le lien vers sa commande, voit les produits retenus et leurs prix, puis clique « Je confirme ma commande » en choisissant retrait ou livraison. Rien n'est payé avant cet accord, qui est horodaté dans l'historique (« Autorisation client : CONFIRMÉE »). Une livraison se règle en ligne ; un produit sur ordonnance exige la validation du pharmacien et se retire en pharmacie. Chaque écran indique qui doit agir à l'étape en cours.
 
+## Panier multi-pharmacies et clôture
+
+Le panier (cookie, sans compte) peut contenir des produits de plusieurs pharmacies. À la validation, une commande est créée par pharmacie, chacune vérifiée et confirmée séparément ; une page de suivi groupée (référence PAN-…) les rassemble. Les produits à délivrance encadrée ne peuvent pas y entrer.
+
+Une commande n'est terminée que lorsque toutes les parties l'ont clôturée. En retrait, la pharmacie clôture en validant le code du client. En livraison, la pharmacie confirme la remise au livreur (le livreur ne peut pas partir avant), puis le livreur clôture en validant le code du client. Le client clique enfin « J'ai bien reçu ma commande » ou signale un problème, qui laisse la commande ouverte et prévient la pharmacie.
+
 ## Limites connues de cette version
 
 - Paiement en ligne : prestataire simulé (`PAYMENT_PROVIDER=sandbox`). Brancher un vrai prestataire Mobile Money / carte revient à appeler `applyPaymentResult` depuis son webhook signé.
