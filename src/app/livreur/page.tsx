@@ -8,6 +8,11 @@ import { relativeTime } from "@/lib/availability";
 import { formatMoney } from "@/lib/config";
 import { db } from "@/lib/db";
 import { directionsUrl } from "@/lib/map-items";
+import Link from "next/link";
+import { distanceKm, formatDistance } from "@/lib/geo";
+import { getSettings } from "@/lib/settings";
+import { locateAddress } from "@/lib/services/fees";
+import { courierBalance } from "@/lib/services/ledger";
 import { missionLabel, openMissions } from "@/lib/services/orders";
 import { COURIER_DOCS, STATUS_LABEL, docLabel, documentsOf } from "@/lib/services/onboarding";
 import { AddCourierDocumentsForm } from "./inscription/forms";
@@ -89,7 +94,14 @@ export default async function CourierHome({ searchParams }: { searchParams: Prom
     db.order.findMany({ where: { courierId: c.id, status: { in: ["COURIER_ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY"] } }, include: { pharmacy: true, payments: true }, orderBy: { updatedAt: "desc" } }),
     db.zone.findMany(),
   ]);
-  const openZones = await Promise.all(open.map((o) => zoneOf(o.deliveryAddress, zones)));
+  // Alerte de mission : seules les pharmacies à distance raisonnable de la zone habituelle du livreur (réglage).
+  const { courier: rules } = await getSettings();
+  const home = c.zone ? await locateAddress(c.zone, c.city ?? undefined) : null;
+  const nearby = open
+    .map((o) => ({ o, pickupKm: home ? distanceKm(home, o.pharmacy) : null }))
+    .filter((m) => m.pickupKm === null || m.pickupKm <= rules.missionRadiusKm);
+  const openZones = await Promise.all(nearby.map(({ o }) => zoneOf(o.deliveryAddress, zones)));
+  const balance = await courierBalance(c.id);
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -99,7 +111,10 @@ export default async function CourierHome({ searchParams }: { searchParams: Prom
           <h1 className="text-2xl font-extrabold text-navy">Bonjour {c.name.replace(" (démo)", "")}</h1>
           <AutoRefresh seconds={20} />
         </div>
-        <form action={courierLogout}><button className={buttonClass("secondary", "min-h-10")}><Icon name="logout" size={16} />Quitter</button></form>
+        <div className="flex gap-2">
+          <Link href="/livreur/gains" className={buttonClass("secondary", "min-h-10")} data-testid="balance-link">Gains · {formatMoney(balance)}</Link>
+          <form action={courierLogout}><button className={buttonClass("ghost", "min-h-10")} aria-label="Quitter"><Icon name="logout" size={16} /></button></form>
+        </div>
       </div>
 
       {mine.map((o) => {
@@ -156,8 +171,9 @@ export default async function CourierHome({ searchParams }: { searchParams: Prom
       })}
 
       <section className="space-y-3">
-        <h2 className="flex items-center gap-2 font-extrabold text-navy">Missions disponibles <span className="rounded-full bg-blue-50 px-2 text-xs font-bold text-blue">{open.length}</span></h2>
-        {open.map((o, i) => (
+        <h2 className="flex items-center gap-2 font-extrabold text-navy">Missions disponibles <span className="rounded-full bg-blue-50 px-2 text-xs font-bold text-blue">{nearby.length}</span></h2>
+        {home && <p className="text-xs text-muted">Pharmacies à {rules.missionRadiusKm} km au plus de votre zone ({c.zone}).</p>}
+        {nearby.map(({ o, pickupKm }, i) => (
           <article key={o.id} className="space-y-3 rounded-2xl border border-line bg-white p-4" data-testid="open-mission">
             <div className="flex items-center justify-between">
               <p className="font-mono font-bold text-navy">Mission #{missionLabel(o.missionNo)}</p>
@@ -166,7 +182,10 @@ export default async function CourierHome({ searchParams }: { searchParams: Prom
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
               <dt className="text-muted">Pharmacie</dt><dd className="font-semibold text-navy">{o.pharmacy.name}</dd>
               <dt className="text-muted">Destination</dt><dd className="font-semibold text-navy">Zone client : {openZones[i]}</dd>
+              {pickupKm !== null && <><dt className="text-muted">Depuis votre zone</dt><dd className="font-semibold text-navy">{formatDistance(pickupKm)} jusqu'à la pharmacie</dd></>}
+              {o.deliveryDistanceKm !== null && <><dt className="text-muted">Course</dt><dd className="font-semibold text-navy">{o.deliveryDistanceKm} km</dd></>}
               <dt className="text-muted">Statut</dt><dd className="font-semibold text-navy">{STATUS_TEXT[o.status]}</dd>
+              <dt className="text-muted">Votre gain</dt><dd className="font-extrabold text-turq-700" data-testid="mission-earning">{formatMoney(o.courierEarning, o.currency)}</dd>
             </dl>
             <div className="flex gap-2">
               <MissionForm orderId={o.id} action="accept" className="flex-1"><SubmitButton className="w-full">Accepter</SubmitButton></MissionForm>
@@ -174,7 +193,7 @@ export default async function CourierHome({ searchParams }: { searchParams: Prom
             </div>
           </article>
         ))}
-        {!open.length && <p className="rounded-2xl border border-dashed border-line-strong p-6 text-center text-sm text-muted">Aucune mission pour le moment. La liste se met à jour automatiquement.</p>}
+        {!nearby.length && <p className="rounded-2xl border border-dashed border-line-strong p-6 text-center text-sm text-muted">Aucune mission pour le moment. La liste se met à jour automatiquement.</p>}
       </section>
     </div>
   );

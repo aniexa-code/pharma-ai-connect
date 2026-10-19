@@ -33,6 +33,10 @@ export const DEFAULT_SETTINGS = {
     groupedDiscountPct: 20,
     /** Commission Pharma AI Connect sur les frais de livraison (%). */
     commissionPct: 15,
+    /** Arrondi des frais de livraison au multiple supérieur (ex. 25 FCFA). */
+    roundTo: 25,
+    /** Distance retenue quand le quartier de l'adresse n'est pas reconnu (km). */
+    unknownZoneKm: 4,
   },
   courier: {
     /** Seuil minimal de demande de paiement. */

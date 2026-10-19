@@ -48,6 +48,8 @@ export const SETTING_SECTIONS: { title: string; fields: SettingField[] }[] = [
       { path: "delivery.nightEnd", label: "Fin de la nuit", kind: "time" },
       { path: "delivery.groupedDiscountPct", label: "Réduction pour une course regroupée", kind: "percent", min: 0, max: 100 },
       { path: "delivery.commissionPct", label: "Commission Pharma AI Connect sur la livraison", kind: "percent", min: 0, max: 100 },
+      { path: "delivery.roundTo", label: "Arrondi des frais de livraison", kind: "money", min: 1, max: 1000 },
+      { path: "delivery.unknownZoneKm", label: "Distance retenue si le quartier n'est pas reconnu", unit: "km", kind: "number", min: 0, max: 50 },
     ],
   },
   {

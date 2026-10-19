@@ -6,6 +6,7 @@ import { Alert, ButtonLink, Card, Eyebrow, PageTitle } from "@/components/ui";
 import { getCustomer } from "@/lib/auth";
 import { ORDER_SLOTS, formatMoney } from "@/lib/config";
 import { db } from "@/lib/db";
+import { getSettings } from "@/lib/settings";
 import { METHOD_LABEL, availableMethods } from "@/lib/services/orders";
 import { OrderForm } from "./OrderForm";
 
@@ -18,6 +19,8 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
   const slug = String(sp.pharmacie ?? "");
   const pharmacy = await db.pharmacy.findFirst({ where: { slug, active: true } });
   if (!pharmacy) notFound();
+  const { delivery: rates } = await getSettings(pharmacy.country);
+  const feeFrom = `dès ${formatMoney(rates.minFee)}, selon la distance`;
 
   // Panier transmis par l'URL : « p=id:qté » (répétable) ou « q_id=qté » depuis la fiche pharmacie.
   const wanted = new Map<string, number>();
@@ -73,7 +76,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
               ))}
             </ul>
             <p className="flex justify-between text-sm"><span className="text-muted">Sous-total</span><span className="font-bold text-navy">{formatMoney(subtotal)}</span></p>
-            {pharmacy.offersDelivery && <p className="flex justify-between text-sm"><span className="text-muted">Frais de livraison (si livraison)</span><span className="font-semibold text-navy">{formatMoney(pharmacy.deliveryFee)}</span></p>}
+            {pharmacy.offersDelivery && <p className="flex justify-between text-sm"><span className="text-muted">Frais de livraison (si livraison)</span><span className="font-semibold text-navy">{feeFrom}</span></p>}
           </Card>
           {restricted.length > 0 && (
             <Alert tone="amber">
@@ -91,8 +94,8 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
             methods={availableMethods(pharmacy.paymentMethods).map((m) => ({ value: m, label: METHOD_LABEL[m] }))}
             slots={ORDER_SLOTS}
             subtotal={formatMoney(subtotal)}
-            deliveryFee={pharmacy.deliveryFee}
-            formatTotal={{ pickup: formatMoney(subtotal), delivery: formatMoney(subtotal + pharmacy.deliveryFee), fee: formatMoney(pharmacy.deliveryFee) }}
+            deliveryFee={rates.minFee}
+            formatTotal={{ pickup: formatMoney(subtotal), delivery: `${formatMoney(subtotal)} + livraison`, fee: feeFrom }}
             addresses={addresses.map((a) => ({ id: a.id, label: a.label, line: [a.line, a.district, a.city].filter(Boolean).join(", ") }))}
             defaults={{ name: customer?.name, phone: customer?.phone ?? undefined, email: customer?.email, channel: customer?.notifyChannel }}
           />

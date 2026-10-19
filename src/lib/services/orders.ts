@@ -7,6 +7,9 @@ import { handoverCode, hashToken, ipFingerprint, newNonce, publicRef, trackingTo
 import { ServiceError } from "../errors";
 import { notify } from "../notify";
 import { rateLimit } from "../rate-limit";
+import { getSettings } from "../settings";
+import { deliveryQuoteFor, serviceFeeFor } from "./fees";
+import { recordCompletion } from "./ledger";
 import { firstIssue, orderInput, type Channel, type OrderInput } from "../validation";
 
 export const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -201,7 +204,8 @@ export async function createGuestOrder(
     );
 
   const subtotal = stocks.reduce((sum, s) => sum + s.price * merged.get(s.productId)!, 0);
-  const deliveryFee = input.fulfillment === "DELIVERY" ? pharmacy.deliveryFee : 0;
+  // Les frais sont calculés à la confirmation du client, une fois la pharmacie et l'adresse connues.
+  const deliveryFee = 0;
   // Le stock numérique n'engage pas la pharmacie : toute commande commence par une vérification physique.
   // Rien n'est payé avant que la pharmacie ait confirmé et que le client ait donné son accord.
   const status: OrderStatus = "PLACED";
@@ -454,8 +458,21 @@ export async function customerConfirm(
   if (input.fulfillment === "DELIVERY" && input.paymentMethod === "CASH")
     throw new ServiceError("PAYMENT", "Une livraison se règle en ligne : choisissez Mobile Money ou carte.");
 
-  const deliveryFee = input.fulfillment === "DELIVERY" ? o.pharmacy.deliveryFee : 0;
-  const total = o.subtotal + deliveryFee;
+  // Frais calculés par le moteur, d'après les réglages du pays, puis figés sur la commande.
+  const settings = await getSettings(o.pharmacy.country);
+  const quote = input.fulfillment === "DELIVERY" ? await deliveryQuoteFor(o.pharmacy, address, settings) : null;
+  if (quote?.outOfRange)
+    throw new ServiceError("FULFILLMENT", `Cette adresse est à ${quote.distanceKm} km de la pharmacie, au-delà de sa zone de livraison (${o.pharmacy.deliveryRadiusKm} km). Choisissez le retrait ou une autre adresse.`);
+  const serviceFee = await serviceFeeFor(o, settings.fees);
+  const deliveryFee = quote ? quote.fee : 0;
+  const total = o.subtotal + deliveryFee + serviceFee;
+  const fees = {
+    serviceFee,
+    deliveryDistanceKm: quote ? quote.distanceKm : null,
+    deliveryCommission: quote ? quote.commission : 0,
+    courierEarning: quote ? quote.courierEarning : 0,
+    feeBreakdown: quote ? { base: quote.base, distance: quote.distance, night: quote.night, estimated: quote.estimated, commissionPct: settings.delivery.commissionPct } : undefined,
+  };
   const online = input.paymentMethod !== "CASH";
   const next: OrderStatus = online ? "AWAITING_PAYMENT" : "CONFIRMED";
   // Un seul accord possible, même en cas de double clic.
@@ -469,6 +486,7 @@ export async function customerConfirm(
     deliveryNotes: input.fulfillment === "DELIVERY" ? input.deliveryNotes?.trim().slice(0, 300) || null : null,
     deliveryFee,
     total,
+    ...fees,
   }, false);
   const what = input.fulfillment === "PICKUP" ? "retrait" : "remise";
   await notifyOrder(
@@ -520,6 +538,7 @@ export async function completeHandover(pharmacyId: string | { courierId: string 
     handoverCodeUsedAt: now,
     ...(actor === "PHARMACY" ? { pharmacyClosedAt: order.pharmacyClosedAt ?? now } : { courierClosedAt: now }),
   });
+  await recordCompletion(done);
   await notifyOrder(done, "CLOSE_REQUEST", `Avez-vous bien reçu votre commande ${done.publicRef} ? Confirmez-le, ou signalez un problème, depuis votre lien de suivi.`);
   return done;
 }

@@ -105,6 +105,28 @@ S'inscrire ne vaut pas vérification :
 
 L'administrateur peut valider (en corrigeant la position sur la carte), demander des compléments, refuser, suspendre ou réactiver. Chaque décision est expliquée au demandeur et inscrite au journal d'audit. Les problèmes signalés par les clients à la réception sont listés dans `/admin/reclamations`.
 
+## Frais, grand livre et gains des livreurs
+
+Tous les montants viennent des réglages de l'administration et peuvent être définis pays par pays.
+
+**Frais de livraison.** Ils se calculent ainsi : prise en charge, plus un tarif au kilomètre entre la pharmacie et le quartier de l'adresse, avec un plancher minimum, un supplément de nuit et un arrondi. Quand le quartier n'est pas reconnu, une distance forfaitaire est retenue. Une adresse au-delà de la zone de livraison de la pharmacie est refusée.
+
+**Frais de service.** Ils s'appliquent une fois par panier, ou pour chaque pharmacie, selon le réglage choisi. Les montants sont figés sur la commande au moment où le client la confirme.
+
+**Grand livre** (`LedgerEntry`). À la remise de chaque commande, quatre écritures sont créées :
+- les ventes de la pharmacie ;
+- les frais de service ;
+- la commission de la plateforme sur la livraison ;
+- le gain du livreur.
+
+Un déclencheur PostgreSQL, installé par le seed, interdit toute modification ou suppression d'une écriture. Une correction s'ajoute toujours en écriture inverse.
+
+**Gains des livreurs** (`/livreur/gains`). Le livreur voit son solde et ses gains du jour, de la semaine et depuis le début. Il peut demander un retrait à partir du seuil fixé dans les réglages, par Mobile Money ou Moov Money.
+
+**Traitement des retraits** (`/admin/finances`). L'administration :
+- ne peut marquer un retrait comme payé qu'avec la référence de la transaction ;
+- peut le refuser, et le montant est alors recrédité au livreur.
+
 ## Limites connues de cette version
 
 - Paiement en ligne : prestataire simulé (`PAYMENT_PROVIDER=sandbox`). Brancher un vrai prestataire Mobile Money / carte revient à appeler `applyPaymentResult` depuis son webhook signé.

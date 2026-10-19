@@ -84,7 +84,7 @@ type ConfirmProps = {
   address: string;
   methods: { value: string; label: string }[];
   preferredMethod: string;
-  totals: { pickup: string; delivery: string; fee: string };
+  totals: { pickup: string; delivery: string; fee: string; service: string | null; note: string };
 };
 
 export function ConfirmOrderForm(p: ConfirmProps) {
@@ -130,6 +130,10 @@ export function ConfirmOrderForm(p: ConfirmProps) {
         </div>
         {mode === "DELIVERY" && <p className="text-xs text-muted">Une livraison se règle en ligne, avant le départ du livreur.</p>}
       </fieldset>
+      <div className="space-y-1 text-xs text-muted" data-testid="fees">
+        {p.totals.service && <p>Frais de service Pharma AI Connect : {p.totals.service}</p>}
+        {mode === "DELIVERY" && <p>{p.totals.note}</p>}
+      </div>
       <p className="flex items-end justify-between rounded-2xl bg-navy p-4 text-white">
         <span className="font-semibold">Total</span>
         <span className="text-2xl font-extrabold text-turq">{mode === "DELIVERY" ? p.totals.delivery : p.totals.pickup}</span>

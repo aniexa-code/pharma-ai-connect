@@ -3,10 +3,12 @@
 // mot de passe des comptes de démonstration, réaligné sur DEMO_PHARMACY_PASSWORD s'il a changé.
 import { PrismaClient, type Regulation, type StockSource, type StockStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { installLedgerGuard } from "../src/lib/services/ledger";
 
 const db = new PrismaClient();
 
 const CITY = "Cotonou";
+const DEMO_DELIVERY_RADIUS_KM = 12;
 const zones = [
   { name: "Ganhi", city: CITY, lat: 6.3565, lng: 2.4305 },
   { name: "Akpakpa", city: CITY, lat: 6.3625, lng: 2.4505 },
@@ -88,6 +90,7 @@ async function retireOldDemo() {
 }
 
 async function main() {
+  await installLedgerGuard();
   await retireOldDemo();
   await db.country.upsert({
     where: { code: "BJ" },
@@ -125,13 +128,15 @@ async function main() {
         onDutyUntil: ph.onDuty ? new Date(Date.now() + 365 * 86400_000) : null,
         offersDelivery: ph.delivery,
         deliveryFee: ph.fee,
+        deliveryRadiusKm: DEMO_DELIVERY_RADIUS_KM,
         paymentMethods: ph.methods,
       },
     });
     // Pharmacies fictives : horaires et garde reconfirmés à chaque déploiement pour que la démo reste vivante.
     await db.pharmacy.update({
       where: { id: pharmacy.id },
-      data: { hoursConfirmedAt: new Date(), onDutyUntil: ph.onDuty ? new Date(Date.now() + 365 * 86400_000) : null },
+      // Zone de livraison couvrant l'agglomération : la distance réelle est désormais contrôlée à la confirmation.
+      data: { hoursConfirmedAt: new Date(), onDutyUntil: ph.onDuty ? new Date(Date.now() + 365 * 86400_000) : null, deliveryRadiusKm: DEMO_DELIVERY_RADIUS_KM },
     });
     for (const [j, prod] of productRows.entries()) {
       const [status, source, age] = PATTERNS[(i * 3 + j) % PATTERNS.length];
