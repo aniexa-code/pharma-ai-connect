@@ -5,6 +5,8 @@ import { adminLogout } from "./actions";
 
 const LINKS = [
   { href: "/admin", label: "Vue d'ensemble" },
+  { href: "/admin/inscriptions", label: "Inscriptions" },
+  { href: "/admin/reclamations", label: "Réclamations" },
   { href: "/admin/reglages", label: "Réglages" },
 ];
 

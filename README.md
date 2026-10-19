@@ -94,6 +94,17 @@ Le panier (cookie, sans compte) peut contenir des produits de plusieurs pharmaci
 
 Une commande n'est terminée que lorsque toutes les parties l'ont clôturée. En retrait, la pharmacie clôture en validant le code du client. En livraison, la pharmacie confirme la remise au livreur (le livreur ne peut pas partir avant), puis le livreur clôture en validant le code du client. Le client clique enfin « J'ai bien reçu ma commande » ou signale un problème, qui laisse la commande ouverte et prévient la pharmacie.
 
+## Inscriptions vérifiées
+
+Une pharmacie (`/pharmacie/inscription`) ou un livreur (`/livreur/inscription`) s'inscrit avec ses pièces justificatives : photos ou PDF, 2 Mo au plus chacune. Le type réel de chaque fichier est contrôlé, et les photos sont allégées dans le navigateur avant l'envoi. Les pièces sont stockées en base et ne sont consultables que par l'administration.
+
+S'inscrire ne vaut pas vérification :
+- tant qu'un administrateur n'a pas validé le dossier dans `/admin/inscriptions`, la pharmacie reste invisible et ne peut pas recevoir de commandes ;
+- de même, le livreur ne voit aucune mission et ne peut en accepter aucune ;
+- le demandeur se connecte pour suivre son statut et compléter son dossier.
+
+L'administrateur peut valider (en corrigeant la position sur la carte), demander des compléments, refuser, suspendre ou réactiver. Chaque décision est expliquée au demandeur et inscrite au journal d'audit. Les problèmes signalés par les clients à la réception sont listés dans `/admin/reclamations`.
+
 ## Limites connues de cette version
 
 - Paiement en ligne : prestataire simulé (`PAYMENT_PROVIDER=sandbox`). Brancher un vrai prestataire Mobile Money / carte revient à appeler `applyPaymentResult` depuis son webhook signé.

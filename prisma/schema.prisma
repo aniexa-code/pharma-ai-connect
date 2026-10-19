@@ -80,34 +80,41 @@ model AdminUser {
 }
 
 model Pharmacy {
-  id               String    @id @default(cuid())
-  slug             String    @unique
-  name             String
-  address          String
-  district         String
-  city             String
-  country          String    @default("BJ")
-  lat              Float
-  lng              Float
-  phone            String
-  whatsapp         String?
-  email            String?
+  id                 String             @id @default(cuid())
+  slug               String             @unique
+  name               String
+  address            String
+  district           String
+  city               String
+  country            String             @default("BJ")
+  lat                Float
+  lng                Float
+  phone              String
+  whatsapp           String?
+  email              String?
   /// Horaires hebdomadaires : { "1": [["08:00","20:00"]], ... } (0 = dimanche)
-  openingHours     Json
+  openingHours       Json
   /// Date à laquelle la pharmacie a confirmé ses horaires : trop ancienne, le statut « ouvert » n'est plus affiché.
-  hoursConfirmedAt DateTime?
-  onDuty           Boolean   @default(false) // pharmacie de garde
+  hoursConfirmedAt   DateTime?
+  onDuty             Boolean            @default(false) // pharmacie de garde
   /// Fin de la garde déclarée : sans date ou date passée, la pharmacie n'est pas présentée comme de garde.
-  onDutyUntil      DateTime?
-  offersPickup     Boolean   @default(true)
-  offersDelivery   Boolean   @default(false)
-  deliveryFee      Int       @default(0)
-  deliveryRadiusKm Float     @default(5)
+  onDutyUntil        DateTime?
+  offersPickup       Boolean            @default(true)
+  offersDelivery     Boolean            @default(false)
+  deliveryFee        Int                @default(0)
+  deliveryRadiusKm   Float              @default(5)
   /// Moyens de paiement acceptés (codes PaymentMethod)
-  paymentMethods   String[]  @default(["CASH"])
-  active           Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  paymentMethods     String[]           @default(["CASH"])
+  active             Boolean            @default(true)
+  /// Vérification humaine du dossier. Les pharmacies existantes restent validées ; une inscription démarre en PENDING.
+  verificationStatus VerificationStatus @default(APPROVED)
+  verificationNote   String?
+  verifiedAt         DateTime?
+  submittedAt        DateTime?
+  licenseNumber      String?
+  ownerName          String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   stocks       Stock[]
   staff        PharmacyUser[]
@@ -184,15 +191,53 @@ model PharmacyUser {
 
 // Livreurs : voient les missions de livraison, l'adresse complète seulement après acceptation.
 model Courier {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  phone        String
-  passwordHash String
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id                 String             @id @default(cuid())
+  email              String             @unique
+  name               String
+  phone              String
+  passwordHash       String
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  /// Un livreur ne reçoit aucune mission tant que son dossier n'est pas validé par un administrateur.
+  verificationStatus VerificationStatus @default(APPROVED)
+  verificationNote   String?
+  verifiedAt         DateTime?
+  submittedAt        DateTime?
+  city               String?
+  zone               String?
+  vehicle            String?
+  idNumber           String?
 
   orders Order[]
+}
+
+enum VerificationStatus {
+  PENDING // dossier reçu, en attente d'examen
+  NEEDS_INFO // pièce manquante ou illisible : le demandeur complète
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DocumentOwner {
+  PHARMACY
+  COURIER
+}
+
+/// Pièces justificatives, conservées en base (jamais publiques) et consultables par l'administration seulement.
+model VerificationDocument {
+  id        String        @id @default(cuid())
+  ownerType DocumentOwner
+  ownerId   String
+  kind      String
+  filename  String
+  mime      String
+  size      Int
+  sha256    String
+  data      Bytes
+  createdAt DateTime      @default(now())
+
+  @@index([ownerType, ownerId])
 }
 
 // ---------- Comptes clients (facultatifs) ----------
