@@ -355,6 +355,55 @@ async function main() {
       assert.match(xlsx.headers()["content-type"], /spreadsheetml/);
     });
 
+    await check("inscrire une pharmacie : invisible jusqu'à la validation par l'administration", async () => {
+      const owner = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+      await owner.goto(`${BASE}/pharmacie/connexion`);
+      await owner.getByRole("link", { name: "Inscrire ma pharmacie" }).first().click();
+      const form = owner.getByTestId("pharmacy-signup");
+      await form.locator("input[name=name]").fill("Pharmacie Étoile du Port");
+      await form.locator("input[name=licenseNumber]").fill("MS/DPMED/2026-118");
+      await form.locator("input[name=ownerName]").fill("Dr Afi Houngbo");
+      await form.locator("input[name=phone]").fill("+229 01 97 55 44 33");
+      await form.locator("input[name=address]").fill("Boulevard de la Marina");
+      await form.locator("input[name=district]").fill("Ganhi");
+      await form.locator("input[name=doc_PHARMACY_LICENSE]").setInputFiles({ name: "licence.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 licence") });
+      await form.locator("input[name=doc_OWNER_ID]").setInputFiles({ name: "cni.jpg", mimeType: "image/jpeg", buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70]) });
+      await form.locator("input[name=email]").fill("etoile@exemple.bj");
+      await form.locator("input[name=password]").fill("motdepasse-etoile");
+      await form.locator("input[name=consent]").check();
+      await shot(owner, "inscription-pharmacie");
+      await form.getByRole("button", { name: "Envoyer mon dossier" }).click();
+      await owner.waitForURL(/\/pharmacie\/statut/);
+      assert.match(await owner.getByTestId("verification-status").innerText(), /En attente de vérification/);
+      await owner.goto(`${BASE}/pharmacie/stock`);
+      await owner.waitForURL(/\/pharmacie\/statut/);
+      assert.equal((await client.goto(`${BASE}/pharmacies/pharmacie-etoile-du-port`))?.status(), 404, "invisible avant validation");
+
+      const admin = await (await browser.newContext()).newPage();
+      await admin.goto(`${BASE}/admin/connexion`);
+      await admin.fill("input[name=email]", "admin@demo.pharma-ai.local");
+      await admin.fill("input[name=password]", PASSWORD);
+      await admin.click("button[type=submit]");
+      await admin.waitForURL(`${BASE}/admin`);
+      await admin.getByRole("link", { name: /Dossiers à vérifier/ }).click();
+      await admin.getByTestId("verification-queue").getByText("Pharmacie Étoile du Port").click();
+      assert.match(await admin.getByTestId("documents").innerText(), /Ouvrir \(PDF/);
+      await shot(admin, "admin-dossier");
+      await admin.getByTestId("decision-form").getByRole("button", { name: "Valider le dossier" }).click();
+      await admin.getByText("Décision enregistrée.").waitFor();
+      await admin.close();
+
+      await owner.goto(`${BASE}/pharmacie`);
+      await owner.getByTestId("stock-summary").waitFor();
+      await owner.close();
+      assert.equal((await client.goto(`${BASE}/pharmacies/pharmacie-etoile-du-port`))?.status(), 200, "visible après validation");
+      await client.goto(`${BASE}/livreur/inscription`);
+      await client.getByTestId("courier-signup").locator("input[name=doc_DRIVING_LICENSE][required]").waitFor({ state: "attached" });
+      await client.getByTestId("courier-signup").locator("select[name=vehicle]").selectOption("VELO");
+      assert.equal(await client.locator("input[name=doc_DRIVING_LICENSE][required]").count(), 0, "pas de permis exigé à vélo");
+      await shot(client, "inscription-livreur");
+    });
+
     await check("créer un compte plus tard et rattacher la commande après vérification", async () => {
       await client.goto(`${BASE}/compte/inscription`);
       await client.fill("input[name=name]", "Grâce");

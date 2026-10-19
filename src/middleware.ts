@@ -6,9 +6,9 @@ import { ADMIN_COOKIE, COURIER_COOKIE, CUSTOMER_COOKIE, PHARMACY_COOKIE, verifyS
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
-  const isPharmacy = under("/pharmacie") && pathname !== "/pharmacie/connexion";
+  const isPharmacy = under("/pharmacie") && !["/pharmacie/connexion", "/pharmacie/inscription"].includes(pathname);
   const isAccount = under("/compte") && !["/compte/connexion", "/compte/inscription"].includes(pathname);
-  const isCourier = under("/livreur") && pathname !== "/livreur/connexion";
+  const isCourier = under("/livreur") && !["/livreur/connexion", "/livreur/inscription"].includes(pathname);
   const isAdmin = under("/admin") && pathname !== "/admin/connexion";
   if (!isPharmacy && !isAccount && !isCourier && !isAdmin) return NextResponse.next();
   const [cookie, kind, login] = isPharmacy

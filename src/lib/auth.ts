@@ -24,9 +24,11 @@ export const getPharmacyUser = cache(async () => {
   return db.pharmacyUser.findUnique({ where: { id: s.uid }, include: { pharmacy: true } });
 });
 
+/** Espace pharmacie complet : réservé aux pharmacies dont le dossier a été validé. */
 export async function requirePharmacyUser() {
   const u = await getPharmacyUser();
   if (!u) redirect("/pharmacie/connexion");
+  if (u.pharmacy.verificationStatus !== "APPROVED") redirect("/pharmacie/statut");
   return u;
 }
 
@@ -53,7 +55,8 @@ export async function startPharmacySession(id: string, pharmacyId: string) {
 export const getCourier = cache(async () => {
   const s = await verifySession((await cookies()).get(COURIER_COOKIE)?.value);
   if (!s || s.kind !== "COURIER") return null;
-  return db.courier.findFirst({ where: { id: s.uid, active: true } });
+  // Un livreur en cours de vérification peut se connecter pour suivre son dossier, sans voir de mission.
+  return db.courier.findFirst({ where: { id: s.uid, OR: [{ active: true }, { verificationStatus: { not: "APPROVED" } }] } });
 });
 
 export async function requireCourier() {

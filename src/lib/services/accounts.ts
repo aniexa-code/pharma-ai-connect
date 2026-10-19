@@ -87,7 +87,9 @@ export async function authenticateCourier(emailRaw: string, password: string, ip
   const email = emailRaw.trim().toLowerCase();
   if (!(await rateLimit(`clogin:${ip}`, 20, 900_000))) throw new ServiceError("RATE", "Trop d'essais. Réessayez dans 15 minutes.");
   const c = await db.courier.findUnique({ where: { email } });
-  if (!c || !c.active || !(await bcrypt.compare(password, c.passwordHash))) throw new ServiceError("AUTH", "E-mail ou mot de passe incorrect.");
+  // Un compte désactivé est refusé ; un dossier en cours de vérification se connecte pour suivre son statut.
+  const blocked = c && !c.active && c.verificationStatus === "APPROVED";
+  if (!c || blocked || !(await bcrypt.compare(password, c.passwordHash))) throw new ServiceError("AUTH", "E-mail ou mot de passe incorrect.");
   return c;
 }
 

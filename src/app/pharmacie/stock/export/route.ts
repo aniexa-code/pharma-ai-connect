@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const u = await getPharmacyUser();
+  if (u && u.pharmacy.verificationStatus !== "APPROVED") return new Response("Accès refusé", { status: 403 });
   if (!u) return NextResponse.redirect(new URL("/pharmacie/connexion", req.url));
   const rows = await stockExportRows(u.pharmacyId);
   const stamp = new Date().toISOString().slice(0, 10);

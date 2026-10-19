@@ -51,6 +51,8 @@ export function SiteFooter() {
           <p className="font-bold text-navy">Professionnels</p>
           <Link href="/pharmacie" className="block text-muted hover:text-navy">Espace pharmacie</Link>
           <Link href="/livreur" className="block text-muted hover:text-navy">Centre de livraison</Link>
+          <Link href="/pharmacie/inscription" className="block text-muted hover:text-navy">Inscrire ma pharmacie</Link>
+          <Link href="/livreur/inscription" className="block text-muted hover:text-navy">Devenir livreur</Link>
         </div>
       </div>
     </footer>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Badge, Card } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { countryInfo } from "@/lib/config";
@@ -15,6 +16,14 @@ const ACTION_LABEL: Record<string, string> = {
   HOURS_CONFIRMED: "Horaires confirmés",
   DUTY_DECLARED: "Garde déclarée",
   DUTY_ENDED: "Garde terminée",
+  STOCK_IMPORTED: "Stock importé",
+  SIGNUP_SUBMITTED: "Dossier d'inscription reçu",
+  DOCUMENTS_ADDED: "Pièces ajoutées au dossier",
+  VERIFICATION_APPROVE: "Dossier validé",
+  VERIFICATION_NEEDS_INFO: "Compléments demandés",
+  VERIFICATION_REJECT: "Dossier refusé",
+  VERIFICATION_SUSPEND: "Compte suspendu",
+  VERIFICATION_REACTIVATE: "Compte réactivé",
 };
 
 export default async function AdminHome() {
@@ -22,11 +31,14 @@ export default async function AdminHome() {
   const now = new Date();
   const { search } = await getSettings();
   const staleBefore = new Date(now.getTime() - search.hoursMaxAgeDays * 86_400_000);
-  const [pharmacies, couriers, ordersToday, logs] = await Promise.all([
+  const todo = { verificationStatus: { in: ["PENDING", "NEEDS_INFO"] as ("PENDING" | "NEEDS_INFO")[] } };
+  const [pharmacies, couriers, ordersToday, logs, toVerify, complaints] = await Promise.all([
     db.pharmacy.findMany({ orderBy: { name: "asc" } }),
     db.courier.count({ where: { active: true } }),
     db.order.count({ where: { createdAt: { gte: new Date(now.getTime() - 86_400_000) } } }),
     db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
+    Promise.all([db.pharmacy.count({ where: todo }), db.courier.count({ where: todo })]).then(([p, c]) => p + c),
+    db.order.count({ where: { customerIssue: { not: null }, customerClosedAt: null } }),
   ]);
   const stale = pharmacies.filter((p) => p.active && (!p.hoursConfirmedAt || p.hoursConfirmedAt < staleBefore));
   const onDuty = pharmacies.filter((p) => p.active && isOnDuty(p, now));
@@ -36,19 +48,24 @@ export default async function AdminHome() {
     { label: "De garde en ce moment", value: onDuty.length },
     { label: "Livreurs actifs", value: couriers },
     { label: "Commandes (24 h)", value: ordersToday },
+    { label: "Dossiers à vérifier", value: toVerify, href: "/admin/inscriptions" },
+    { label: "Réclamations ouvertes", value: complaints, href: "/admin/reclamations" },
   ];
 
   return (
     <div className="mx-auto max-w-4xl">
       <AdminNav name={a.name} current="/admin" />
       <h1 className="mb-4 text-2xl font-extrabold text-navy">Vue d'ensemble · {countryInfo().name}</h1>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stats.map((s) => (
-          <Card key={s.label} className="p-4">
-            <p className="text-2xl font-extrabold text-navy">{s.value}</p>
-            <p className="text-xs text-muted">{s.label}</p>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {stats.map((s) => {
+          const body = (
+            <Card className={`h-full p-4 ${"href" in s && s.value ? "ring-2 ring-warn/40" : ""}`}>
+              <p className="text-2xl font-extrabold text-navy">{s.value}</p>
+              <p className="text-xs text-muted">{s.label}</p>
+            </Card>
+          );
+          return "href" in s ? <Link key={s.label} href={s.href!}>{body}</Link> : <div key={s.label}>{body}</div>;
+        })}
       </div>
 
       <Card className="mt-6 p-5">

@@ -660,7 +660,7 @@ export function openMissions() {
 
 /** Acceptation d'une mission : un seul livreur peut l'obtenir, même en cas de clics simultanés. */
 export async function courierAccept(courierId: string, orderId: string) {
-  const courier = await db.courier.findFirst({ where: { id: courierId, active: true } });
+  const courier = await db.courier.findFirst({ where: { id: courierId, active: true, verificationStatus: "APPROVED" } });
   if (!courier) throw new ServiceError("AUTH", "Compte livreur inactif.");
   const { count } = await db.order.updateMany({
     where: { id: orderId, fulfillment: "DELIVERY", courierId: null, status: { in: OPEN_FOR_COURIERS } },

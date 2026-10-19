@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
-import type { OrderStatus } from "@prisma/client";
+import type { Courier, OrderStatus } from "@prisma/client";
 import { Icon } from "@/components/brand";
 import { AutoRefresh, SubmitButton } from "@/components/client";
-import { Input, buttonClass } from "@/components/ui";
+import { Alert, Card, Input, buttonClass } from "@/components/ui";
 import { requireCourier } from "@/lib/auth";
 import { relativeTime } from "@/lib/availability";
 import { formatMoney } from "@/lib/config";
 import { db } from "@/lib/db";
 import { directionsUrl } from "@/lib/map-items";
 import { missionLabel, openMissions } from "@/lib/services/orders";
+import { COURIER_DOCS, STATUS_LABEL, docLabel, documentsOf } from "@/lib/services/onboarding";
+import { AddCourierDocumentsForm } from "./inscription/forms";
 import { courierLogout } from "./actions";
 import { MissionForm } from "./forms";
 
@@ -36,8 +38,52 @@ async function zoneOf(address: string | null, zones: { name: string }[]) {
   return zones.find((z) => a.includes(z.name.toLowerCase()))?.name ?? "Communiquée après acceptation";
 }
 
-export default async function CourierHome() {
+const STATUS_TEXT_DOSSIER = {
+  PENDING: "Votre dossier est en cours de vérification. Vous recevrez des missions dès qu'il sera validé.",
+  NEEDS_INFO: "Notre équipe a besoin d'éléments complémentaires avant de valider votre dossier.",
+  REJECTED: "Votre dossier n'a pas été validé.",
+  SUSPENDED: "Votre compte est suspendu : vous ne recevez plus de missions.",
+} as const;
+
+/** Dossier pas encore validé (ou suspendu) : aucune mission, seulement le statut et l'ajout de pièces. */
+async function CourierDossier({ c, fresh }: { c: Courier; fresh: boolean }) {
+  const docs = await documentsOf("COURIER", c.id);
+  const status = c.verificationStatus as Exclude<typeof c.verificationStatus, "APPROVED">;
+  return (
+    <div className="mx-auto max-w-lg space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-blue">Centre de livraison</p>
+          <h1 className="text-2xl font-extrabold text-navy">Bonjour {c.name}</h1>
+        </div>
+        <form action={courierLogout}><button className={buttonClass("secondary", "min-h-10")}><Icon name="logout" size={16} />Quitter</button></form>
+      </div>
+      {fresh && <Alert tone="green">Dossier envoyé. Nous vérifions vos pièces avant de vous ouvrir les missions.</Alert>}
+      <Card className="space-y-3" data-testid="verification-status">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-faint">Statut du dossier</p>
+        <p className="text-xl font-extrabold text-navy">{STATUS_LABEL[status]}</p>
+        <p className="text-sm text-muted">{STATUS_TEXT_DOSSIER[status]}</p>
+        {c.verificationNote && <Alert tone="amber">Message de l'équipe : {c.verificationNote}</Alert>}
+      </Card>
+      <Card className="space-y-3">
+        <h2 className="font-bold text-navy">Pièces envoyées</h2>
+        <ul className="space-y-1 text-sm">
+          {docs.map((d) => <li key={d.id} className="flex items-center gap-2"><Icon name="check" size={16} className="text-turq-700" />{docLabel("COURIER", d.kind)}</li>)}
+        </ul>
+        {(status === "PENDING" || status === "NEEDS_INFO") && (
+          <div className="space-y-2 border-t border-line pt-3">
+            <h3 className="text-sm font-bold text-navy">Ajouter ou remplacer une pièce</h3>
+            <AddCourierDocumentsForm docs={COURIER_DOCS.map((d) => ({ kind: d.kind, label: d.label }))} />
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+export default async function CourierHome({ searchParams }: { searchParams: Promise<{ nouveau?: string }> }) {
   const c = await requireCourier();
+  if (c.verificationStatus !== "APPROVED" || !c.active) return <CourierDossier c={c} fresh={!!(await searchParams).nouveau} />;
   const [open, mine, zones] = await Promise.all([
     openMissions(),
     db.order.findMany({ where: { courierId: c.id, status: { in: ["COURIER_ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY"] } }, include: { pharmacy: true, payments: true }, orderBy: { updatedAt: "desc" } }),
