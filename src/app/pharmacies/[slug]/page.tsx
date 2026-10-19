@@ -168,7 +168,7 @@ export default async function PharmacyPage({ params, searchParams }: { params: P
           <Card className="space-y-2 text-sm">
             <h2 className="font-extrabold text-navy">Services</h2>
             <p className="flex items-center gap-2"><Icon name="store" size={16} className={p.offersPickup ? "text-turq-700" : "text-faint"} />{p.offersPickup ? "Retrait en pharmacie" : "Pas de retrait"}</p>
-            <p className="flex items-center gap-2"><Icon name="truck" size={16} className={p.offersDelivery ? "text-turq-700" : "text-faint"} />{p.offersDelivery ? `Livraison · ${formatMoney(p.deliveryFee)} · ${p.deliveryRadiusKm} km` : "Pas de livraison"}</p>
+            <p className="flex items-center gap-2"><Icon name="truck" size={16} className={p.offersDelivery ? "text-turq-700" : "text-faint"} />{p.offersDelivery ? `Livraison jusqu'à ${p.deliveryRadiusKm} km · frais selon la distance` : "Pas de livraison"}</p>
           </Card>
         </div>
       </div>

@@ -263,6 +263,7 @@ async function main() {
       const mission = courier.getByTestId("open-mission").first();
       assert.match(await mission.innerText(), /Zone client : Agla/);
       assert.ok(!(await mission.innerText()).includes("portail bleu"), "adresse exacte masquée avant acceptation");
+      assert.match(await mission.getByTestId("mission-earning").innerText(), /\d.*FCFA/, "le gain est annoncé avant acceptation");
       await shot(courier, "livreur-missions");
       await mission.getByRole("button", { name: "Accepter" }).click();
       const mine = courier.getByTestId("my-mission");
@@ -283,7 +284,29 @@ async function main() {
       await mine.locator("input[name=code]").fill(code);
       await mine.getByRole("button", { name: "Valider la livraison" }).click();
       await courier.getByTestId("my-mission").waitFor({ state: "detached" });
+      // Gains : crédités à la livraison, retirables au-delà du seuil, payés sur preuve par l'administration.
+      await courier.getByTestId("balance-link").click();
+      const earned = await db.ledgerEntry.findFirstOrThrow({ where: { account: "COURIER_EARNING" } });
+      assert.equal((await courier.getByTestId("balance").innerText()).replace(/\D/g, ""), String(earned.amount));
+      await shot(courier, "livreur-gains");
+      await courier.getByTestId("payout-form").getByRole("button", { name: "Demander le paiement" }).click();
+      await courier.getByText(/en cours de traitement/).waitFor();
       await courier.context().close();
+      const fin = await (await browser.newContext()).newPage();
+      await fin.goto(`${BASE}/admin/connexion`);
+      await fin.fill("input[name=email]", "admin@demo.pharma-ai.local");
+      await fin.fill("input[name=password]", PASSWORD);
+      await fin.click("button[type=submit]");
+      await fin.waitForURL(`${BASE}/admin`);
+      await fin.goto(`${BASE}/admin/finances`);
+      const payout = fin.getByTestId("payout-decision");
+      await payout.locator("input[name=providerRef]").fill("MTN-2026-0042");
+      await payout.getByRole("button", { name: "Marquer payé" }).click();
+      await fin.getByText("Aucune demande en attente.").waitFor();
+      assert.equal((await db.payoutRequest.findFirstOrThrow()).status, "PAID");
+      assert.match(await fin.getByTestId("ledger-totals").innerText(), /Commission sur livraisons/);
+      await shot(fin, "admin-finances");
+      await fin.close();
 
       await client.goto(deliveryUrl);
       assert.match(await client.getByTestId("order-status").innerText(), /Livrée/);

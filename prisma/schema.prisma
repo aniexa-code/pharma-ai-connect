@@ -435,6 +435,12 @@ model Order {
   customerClosedAt      DateTime?
   closedAt              DateTime?
   customerIssue         String?
+  /// Moteur de frais (étape 6) : montants figés à la confirmation du client, d'après les réglages du moment.
+  serviceFee            Int              @default(0)
+  deliveryDistanceKm    Float?
+  deliveryCommission    Int              @default(0)
+  courierEarning        Int              @default(0)
+  feeBreakdown          Json?
   handoverCodeUsedAt    DateTime?
   handoverAttempts      Int              @default(0)
   requestId             String? // demande de vérification à l'origine de la commande
@@ -588,4 +594,51 @@ model Checkout {
   contactName       String
   phone             String
   createdAt         DateTime @default(now())
+}
+
+// ---------- Finances ----------
+
+/// Grand livre : une ligne n'est jamais modifiée ni supprimée (un déclencheur PostgreSQL l'interdit).
+/// Une correction s'écrit comme une nouvelle ligne de sens inverse.
+model LedgerEntry {
+  id         String   @id @default(cuid())
+  /// Clé d'unicité : la même opération ne peut pas être enregistrée deux fois.
+  ref        String   @unique
+  account    String // PLATFORM_SERVICE_FEE, PLATFORM_DELIVERY_COMMISSION, COURIER_EARNING, COURIER_PAYOUT, PHARMACY_SALES
+  amount     Int // positif : crédit du compte ; négatif : débit
+  currency   String
+  orderId    String?
+  courierId  String?
+  pharmacyId String?
+  payoutId   String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([courierId, createdAt])
+  @@index([account, createdAt])
+  @@index([orderId])
+}
+
+enum PayoutStatus {
+  REQUESTED
+  PAID
+  REJECTED
+}
+
+model PayoutRequest {
+  id          String       @id @default(cuid())
+  courierId   String
+  amount      Int
+  currency    String
+  method      String // MOBILE_MONEY, MOOV_MONEY
+  phone       String
+  status      PayoutStatus @default(REQUESTED)
+  providerRef String?
+  note        String?
+  processedBy String?
+  processedAt DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@index([courierId, createdAt])
+  @@index([status])
 }

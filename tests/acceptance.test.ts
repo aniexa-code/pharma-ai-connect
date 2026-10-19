@@ -159,7 +159,11 @@ describe("Commande invitée, paiement, suivi et notifications", () => {
     );
     const confirmed = await customerConfirm(order.id, { fulfillment: "DELIVERY", slot: "Dès que possible", paymentMethod: "MOBILE_MONEY", deliveryAddress: "Rue 12.054, maison bleue, Agla" });
     assert.equal(confirmed.status, "AWAITING_PAYMENT");
-    assert.equal(confirmed.total, confirmed.subtotal + f.ganhi.deliveryFee);
+    // Frais calculés par le moteur (distance Ganhi → Agla), plus les frais de service.
+    assert.ok(confirmed.deliveryFee >= 500 && confirmed.deliveryDistanceKm! > 5);
+    assert.equal(confirmed.serviceFee, 100);
+    assert.equal(confirmed.total, confirmed.subtotal + confirmed.deliveryFee + confirmed.serviceFee);
+    assert.equal(confirmed.courierEarning + confirmed.deliveryCommission, confirmed.deliveryFee);
 
     let o = await orderByTrackingToken(token);
     await applyPaymentResult(o!.payments[0].id, "FAILED");

@@ -13,6 +13,8 @@ import { ORDER_SLOTS, formatMoney } from "@/lib/config";
 import { CHANNEL_LABEL } from "@/lib/notify";
 import { ANSWER_LABEL, METHOD_LABEL, PAYMENT_LABEL, availableMethods, closureParties, customerModes, isFinal, responsibleFor, trackingUrl } from "@/lib/services/orders";
 import { orderByTrackingToken, visibleHandoverCode } from "@/lib/services/tracking";
+import { deliveryQuoteFor, serviceFeeFor } from "@/lib/services/fees";
+import { getSettings } from "@/lib/settings";
 import { maskPhone } from "@/lib/validation";
 import { attachToMyAccount, cancelOrder, newTrackingLink } from "../actions";
 import { AccountForm, CloseOrderForm, ConfirmOrderForm, OrderMessageForm } from "../forms";
@@ -35,6 +37,15 @@ export default async function TrackingPage({ params, searchParams }: { params: P
   const awaitingMe = o.status === "AWAITING_CUSTOMER";
   // Le code de remise n'a de sens qu'une fois la commande confirmée par le client.
   const showCode = code && !!o.customerConfirmedAt;
+  // Montants proposés au client avant son accord : frais de service et livraison calculés pour l'adresse indiquée.
+  let offer: { pickup: number; delivery: number | null; fee: number | null; service: number; estimated: boolean } | null = null;
+  if (awaitingMe) {
+    const settings = await getSettings(o.pharmacy.country);
+    const service = await serviceFeeFor(o, settings.fees);
+    const q = customerModes(o).includes("DELIVERY") ? await deliveryQuoteFor(o.pharmacy, o.deliveryAddress ?? "", settings) : null;
+    const fee = q && !q.outOfRange ? q.fee : null;
+    offer = { pickup: o.subtotal + service, delivery: fee === null ? null : o.subtotal + fee + service, fee, service, estimated: !!q && !q.outOfRange && q.estimated };
+  }
   const qty = (i: (typeof o.items)[number]) => (i.answer === "INSUFFICIENT" ? (i.confirmedQty ?? 0) : i.answer && i.answer !== "AVAILABLE" ? 0 : i.quantity);
 
   return (
@@ -141,7 +152,15 @@ export default async function TrackingPage({ params, searchParams }: { params: P
             address={o.deliveryAddress ?? ""}
             methods={availableMethods(o.pharmacy.paymentMethods).map((m) => ({ value: m, label: METHOD_LABEL[m] }))}
             preferredMethod={o.paymentPreference ?? "CASH"}
-            totals={{ pickup: formatMoney(o.subtotal, o.currency), delivery: formatMoney(o.subtotal + o.pharmacy.deliveryFee, o.currency), fee: formatMoney(o.pharmacy.deliveryFee, o.currency) }}
+            totals={{
+              pickup: formatMoney(offer!.pickup, o.currency),
+              delivery: offer!.delivery === null ? "selon l'adresse" : formatMoney(offer!.delivery, o.currency),
+              fee: offer!.fee === null ? "calculée selon l'adresse" : formatMoney(offer!.fee, o.currency),
+              service: offer!.service > 0 ? formatMoney(offer!.service, o.currency) : null,
+              note: offer!.estimated
+                ? "Quartier non reconnu dans l'adresse : frais estimés, recalculés à la confirmation."
+                : "Frais de livraison calculés selon la distance pour l'adresse indiquée ; recalculés si vous la modifiez. Le montant exact s'affiche avant le paiement.",
+            }}
           />
         </Card>
       )}
@@ -169,7 +188,8 @@ export default async function TrackingPage({ params, searchParams }: { params: P
                 <span>{o.verifiedAt && !qty(i) ? "—" : formatMoney(i.unitPrice * (o.verifiedAt ? qty(i) : i.quantity), o.currency)}</span>
               </li>
             ))}
-            {o.deliveryFee > 0 && <li className="flex justify-between"><span>Livraison</span><span>{formatMoney(o.deliveryFee, o.currency)}</span></li>}
+            {o.deliveryFee > 0 && <li className="flex justify-between"><span>Livraison{o.deliveryDistanceKm ? ` (${o.deliveryDistanceKm} km)` : ""}</span><span>{formatMoney(o.deliveryFee, o.currency)}</span></li>}
+            {o.serviceFee > 0 && <li className="flex justify-between"><span>Frais de service</span><span>{formatMoney(o.serviceFee, o.currency)}</span></li>}
             <li className="flex justify-between border-t border-line pt-1 font-semibold"><span>{o.verifiedAt ? "Total" : "Total estimé (avant vérification)"}</span><span>{formatMoney(o.total, o.currency)}</span></li>
           </ul>
           {payment && (
