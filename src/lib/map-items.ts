@@ -27,7 +27,7 @@ export function toMapItem(r: PharmacyResult, opts: { productSlug?: string | null
     updated: a ? a.updated : opts.lastUpdate ? `Stock mis à jour ${relativeTime(opts.lastUpdate)}` : null,
     open: r.open.open,
     openLabel: r.open.label,
-    onDuty: p.onDuty,
+    onDuty: r.onDuty,
     distance: r.distance !== null ? formatDistance(r.distance) : null,
     directions: directionsUrl(p),
   };

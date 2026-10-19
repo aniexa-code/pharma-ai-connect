@@ -90,7 +90,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <Input name="label" placeholder="Nom (Maison, Bureau)" required />
             <Input name="line" placeholder="Adresse et repère" required />
             <Input name="district" placeholder="Quartier" />
-            <Input name="city" placeholder="Ville" defaultValue="Brazzaville" />
+            <Input name="city" placeholder="Ville" defaultValue="Cotonou" />
             <SubmitButton variant="secondary">Ajouter</SubmitButton>
           </form>
         </Card>

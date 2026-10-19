@@ -14,10 +14,10 @@ before(async () => {
   const f = await fixture();
   victim = await createGuestOrder({
     ...guest,
-    pharmacyId: f.plateau.id,
+    pharmacyId: f.ganhi.id,
     items: [{ productId: f.paracetamol.id, quantity: 1 }],
     fulfillment: "DELIVERY",
-    deliveryAddress: "12 rue des Manguiers, Poto-Poto",
+    deliveryAddress: "12 rue des Manguiers, Zogbo",
     paymentMethod: "CASH",
   });
 });
@@ -44,8 +44,8 @@ describe("Accès à une commande sans compte", () => {
   });
 
   test("connaître la référence et deviner le téléphone ne révèle rien et n'envoie aucun code", async () => {
-    const wrong = await requestCode("RECOVER_TRACKING", victim.order.publicRef, "+242060000000", "10.0.0.1");
-    const missing = await requestCode("RECOVER_TRACKING", "CMD-ZZZZ-ZZZZ", "+242061234567", "10.0.0.1");
+    const wrong = await requestCode("RECOVER_TRACKING", victim.order.publicRef, "+22901960000000", "10.0.0.1");
+    const missing = await requestCode("RECOVER_TRACKING", "CMD-ZZZZ-ZZZZ", "+22901961234567", "10.0.0.1");
     assert.equal(wrong.message, missing.message, "même réponse que la commande existe ou non");
     assert.equal(wrong.demoCode, undefined);
     assert.equal(await db.verificationCode.count({ where: { orderId: victim.order.id } }), 0);
@@ -66,11 +66,11 @@ describe("Accès à une commande sans compte", () => {
   });
 
   test("les demandes de code en rafale sont bloquées", async () => {
-    for (let i = 0; i < 3; i++) await requestCode("RECOVER_TRACKING", "CMD-AAAA-AAAA", "+242060000000", "10.0.0.3");
+    for (let i = 0; i < 3; i++) await requestCode("RECOVER_TRACKING", "CMD-AAAA-AAAA", "+22901960000000", "10.0.0.3");
     let blocked = false;
     for (let i = 0; i < 10 && !blocked; i++) {
       try {
-        await requestCode("RECOVER_TRACKING", "CMD-AAAA-AAAA", "+242060000000", "10.0.0.3");
+        await requestCode("RECOVER_TRACKING", "CMD-AAAA-AAAA", "+22901960000000", "10.0.0.3");
       } catch (e) {
         blocked = /Trop de demandes/.test(String(e));
       }

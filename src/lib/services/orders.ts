@@ -179,7 +179,7 @@ export async function createGuestOrder(
       subtotal,
       deliveryFee,
       total: subtotal + deliveryFee,
-      currency: currency(),
+      currency: currency(pharmacy.country),
       trackingTokenHash: hashToken(token),
       trackingExpiresAt: new Date(Date.now() + TTL.tracking),
       handoverNonce: nonce,

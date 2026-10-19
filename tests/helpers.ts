@@ -16,20 +16,20 @@ export async function resetDatabase() {
 }
 
 export async function fixture() {
-  const plateau = await db.pharmacy.findUniqueOrThrow({ where: { slug: "pharmacie-du-plateau" } });
-  const talangai = await db.pharmacy.findUniqueOrThrow({ where: { slug: "pharmacie-de-talangai" } });
+  const ganhi = await db.pharmacy.findUniqueOrThrow({ where: { slug: "pharmacie-de-ganhi" } });
+  const godomey = await db.pharmacy.findUniqueOrThrow({ where: { slug: "pharmacie-de-godomey" } });
   const product = (slug: string) => db.product.findUniqueOrThrow({ where: { slug } });
   // Disponibilités maîtrisées pour les tests.
   for (const slug of ["paracetamol-500", "ibuprofene-400", "amoxicilline-500", "tramadol-50"]) {
     const p = await product(slug);
     await db.stock.update({
-      where: { pharmacyId_productId: { pharmacyId: plateau.id, productId: p.id } },
+      where: { pharmacyId_productId: { pharmacyId: ganhi.id, productId: p.id } },
       data: { status: "AVAILABLE", source: "PHARMACY", confirmedAt: new Date() },
     });
   }
   return {
-    plateau,
-    talangai,
+    ganhi,
+    godomey,
     paracetamol: await product("paracetamol-500"),
     ibuprofene: await product("ibuprofene-400"),
     amoxicilline: await product("amoxicilline-500"),
@@ -39,7 +39,7 @@ export async function fixture() {
 
 export const guest = {
   contactName: "Grâce",
-  phone: "+242 06 123 45 67",
+  phone: "+229 01 96 123 45 67",
   notifyChannel: "SMS" as const,
   slot: "Aujourd'hui 17:00 – 18:00",
 };

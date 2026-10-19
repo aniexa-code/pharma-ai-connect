@@ -2,7 +2,7 @@ import { Icon } from "./brand";
 import { LocateButton, SubmitButton } from "./client";
 
 /** La barre de recherche : l'élément le plus important de l'interface. */
-export function SearchForm({ q = "", lieu = "", rayon = "5", lat = "", lng = "", size = "lg", hidden = {} }: { q?: string; lieu?: string; rayon?: string; lat?: string; lng?: string; size?: "lg" | "md"; hidden?: Record<string, string> }) {
+export function SearchForm({ q = "", lieu = "", rayon = "", lat = "", lng = "", size = "lg", hidden = {} }: { q?: string; lieu?: string; rayon?: string; lat?: string; lng?: string; size?: "lg" | "md"; hidden?: Record<string, string> }) {
   const big = size === "lg";
   return (
     <form id="search-form" action="/recherche" method="get" className="w-full">
@@ -20,7 +20,7 @@ export function SearchForm({ q = "", lieu = "", rayon = "5", lat = "", lng = "",
         <span className="hidden h-8 w-px bg-line sm:block" />
         <label className="flex items-center gap-3 rounded-2xl px-3 py-1 focus-within:bg-icy sm:w-[28%]">
           <Icon name="pin" size={20} className="shrink-0 text-blue" />
-          <input name="lieu" defaultValue={lieu} placeholder="Ville ou quartier" aria-label="Ville ou quartier" className="min-h-11 w-full bg-transparent font-semibold text-navy outline-none placeholder:font-medium placeholder:text-faint" />
+          <input id="lieu" name="lieu" defaultValue={lieu} placeholder="Ville ou quartier" aria-label="Ville ou quartier" className="min-h-11 w-full bg-transparent font-semibold text-navy outline-none placeholder:font-medium placeholder:text-faint" />
         </label>
         <input type="hidden" name="rayon" defaultValue={rayon} />
         <input type="hidden" name="lat" defaultValue={lat} />

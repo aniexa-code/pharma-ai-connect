@@ -2,7 +2,7 @@
 import { useActionState, type ReactNode } from "react";
 import { SubmitButton } from "@/components/client";
 import { Alert, Field, Input, Select, Textarea } from "@/components/ui";
-import { orderAction, pharmacyLogin, respondToRequest } from "./actions";
+import { hoursAction, orderAction, pharmacyLogin, respondToRequest } from "./actions";
 
 export function PharmacyLoginForm() {
   const [state, action] = useActionState(pharmacyLogin, {});
@@ -49,5 +49,49 @@ export function RespondForm({ requestId, verification, price }: { requestId: str
       <Alert>{state.error}</Alert>
       <SubmitButton>Envoyer la réponse</SubmitButton>
     </form>
+  );
+}
+
+/** Horaires et garde : la pharmacie confirme ses horaires et déclare une garde avec une heure de fin. */
+export function HoursDutyPanel({ hoursLabel, stale, dutyLabel, onDuty, defaultUntil, minUntil }: {
+  hoursLabel: string; stale: boolean; dutyLabel: string | null; onDuty: boolean; defaultUntil: string; minUntil: string;
+}) {
+  const [state, run] = useActionState(hoursAction, {});
+  return (
+    <div className="space-y-4" data-testid="hours-duty">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-navy">Horaires d'ouverture</p>
+          <p className={`text-sm ${stale ? "font-semibold text-[#a8611d]" : "text-muted"}`}>{hoursLabel}</p>
+        </div>
+        <form action={run}>
+          <input type="hidden" name="action" value="confirm" />
+          <SubmitButton variant={stale ? "primary" : "secondary"} className="min-h-10">Confirmer mes horaires</SubmitButton>
+        </form>
+      </div>
+      <div className="flex flex-wrap items-end justify-between gap-3 border-t border-line pt-4">
+        <div>
+          <p className="text-sm font-bold text-navy">Pharmacie de garde</p>
+          <p className="text-sm text-muted">{dutyLabel ?? "Pas de garde en cours."}</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <form action={run} className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="action" value="duty" />
+            <label className="text-xs font-semibold text-muted">
+              {onDuty ? "Prolonger jusqu'au" : "De garde jusqu'au"}
+              <Input name="until" type="datetime-local" defaultValue={defaultUntil} min={minUntil} required className="mt-1 block min-h-10" />
+            </label>
+            <SubmitButton variant="secondary" className="min-h-10">{onDuty ? "Prolonger" : "Déclarer la garde"}</SubmitButton>
+          </form>
+          {onDuty && (
+            <form action={run}>
+              <input type="hidden" name="action" value="end" />
+              <SubmitButton variant="ghost" className="min-h-10">Terminer la garde</SubmitButton>
+            </form>
+          )}
+        </div>
+      </div>
+      <Alert>{state.error}</Alert>
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-// Données de démonstration (pharmacies fictives à Brazzaville). Idempotent : relancé à chaque
+// Données de démonstration (pharmacies fictives à Cotonou). Idempotent : relancé à chaque
 // déploiement Vercel, il ne modifie jamais ce qui existe déjà (stocks confirmés, commandes...), sauf le
 // mot de passe des comptes de démonstration, réaligné sur DEMO_PHARMACY_PASSWORD s'il a changé.
 import { PrismaClient, type Regulation, type StockSource, type StockStatus } from "@prisma/client";
@@ -6,16 +6,20 @@ import bcrypt from "bcryptjs";
 
 const db = new PrismaClient();
 
+const CITY = "Cotonou";
 const zones = [
-  { name: "Plateau", lat: -4.27, lng: 15.283 },
-  { name: "Poto-Poto", lat: -4.258, lng: 15.287 },
-  { name: "Moungali", lat: -4.248, lng: 15.27 },
-  { name: "Bacongo", lat: -4.287, lng: 15.258 },
-  { name: "Makélékélé", lat: -4.295, lng: 15.235 },
-  { name: "Ouenzé", lat: -4.235, lng: 15.28 },
-  { name: "Talangaï", lat: -4.215, lng: 15.285 },
-  { name: "Mfilou", lat: -4.26, lng: 15.21 },
+  { name: "Ganhi", city: CITY, lat: 6.3565, lng: 2.4305 },
+  { name: "Akpakpa", city: CITY, lat: 6.3625, lng: 2.4505 },
+  { name: "Cadjèhoun", city: CITY, lat: 6.3645, lng: 2.3885 },
+  { name: "Gbégamey", city: CITY, lat: 6.3715, lng: 2.4045 },
+  { name: "Fidjrossè", city: CITY, lat: 6.3645, lng: 2.3475 },
+  { name: "Zogbo", city: CITY, lat: 6.3855, lng: 2.4055 },
+  { name: "Agla", city: CITY, lat: 6.3845, lng: 2.3805 },
+  { name: "Godomey", city: "Abomey-Calavi", lat: 6.4105, lng: 2.3395 },
 ];
+
+/** Ancienne démonstration (Brazzaville), retirée à la demande du porteur de projet. */
+const RETIRED_DEMO = ["pharmacie-du-plateau", "pharmacie-poto-poto", "pharmacie-de-moungali", "pharmacie-bacongo", "pharmacie-de-ouenze", "pharmacie-de-talangai"];
 
 const week = (open: string, close: string, sat = true, sun = false) => ({
   "1": [[open, close]],
@@ -28,12 +32,12 @@ const week = (open: string, close: string, sat = true, sun = false) => ({
 });
 
 const pharmacies = [
-  { slug: "pharmacie-du-plateau", name: "Pharmacie du Plateau (démo)", district: "Plateau", address: "Avenue de la Paix", lat: -4.2712, lng: 15.2841, hours: week("07:30", "21:00", true, true), delivery: true, fee: 1000, methods: ["CASH", "MOBILE_MONEY", "CARD"], onDuty: false },
-  { slug: "pharmacie-poto-poto", name: "Pharmacie Poto-Poto (démo)", district: "Poto-Poto", address: "Rue Mbochis", lat: -4.2575, lng: 15.2862, hours: week("08:00", "20:00"), delivery: true, fee: 1500, methods: ["CASH", "MOBILE_MONEY"], onDuty: false },
-  { slug: "pharmacie-de-moungali", name: "Pharmacie de Moungali (démo)", district: "Moungali", address: "Avenue des Trois Martyrs", lat: -4.2491, lng: 15.2712, hours: { ...week("00:00", "24:00"), "6": [["00:00", "24:00"]], "0": [["00:00", "24:00"]] }, delivery: false, fee: 0, methods: ["CASH"], onDuty: true },
-  { slug: "pharmacie-bacongo", name: "Pharmacie Bacongo (démo)", district: "Bacongo", address: "Avenue Matsoua", lat: -4.2865, lng: 15.2571, hours: week("08:00", "19:30"), delivery: true, fee: 1000, methods: ["CASH", "MOBILE_MONEY"], onDuty: false },
-  { slug: "pharmacie-de-ouenze", name: "Pharmacie de Ouenzé (démo)", district: "Ouenzé", address: "Avenue de la Tsiémé", lat: -4.2361, lng: 15.2793, hours: week("08:00", "20:00", true, true), delivery: true, fee: 2000, methods: ["CASH", "MOBILE_MONEY", "CARD"], onDuty: false },
-  { slug: "pharmacie-de-talangai", name: "Pharmacie de Talangaï (démo)", district: "Talangaï", address: "Route du Nord", lat: -4.2148, lng: 15.2861, hours: week("08:00", "19:00"), delivery: false, fee: 0, methods: ["CASH"], onDuty: false },
+  { slug: "pharmacie-de-ganhi", name: "Pharmacie de Ganhi (démo)", district: "Ganhi", city: CITY, address: "Avenue Clozel", lat: 6.3572, lng: 2.4312, hours: week("07:30", "21:00", true, true), delivery: true, fee: 1000, methods: ["CASH", "MOBILE_MONEY", "CARD"], onDuty: false },
+  { slug: "pharmacie-akpakpa", name: "Pharmacie Akpakpa (démo)", district: "Akpakpa", city: CITY, address: "Boulevard de la CEN-SAD", lat: 6.3618, lng: 2.4528, hours: week("08:00", "20:00"), delivery: true, fee: 1500, methods: ["CASH", "MOBILE_MONEY"], onDuty: false },
+  { slug: "pharmacie-de-cadjehoun", name: "Pharmacie de Cadjèhoun (démo)", district: "Cadjèhoun", city: CITY, address: "Boulevard de France", lat: 6.3641, lng: 2.3893, hours: { ...week("00:00", "24:00"), "6": [["00:00", "24:00"]], "0": [["00:00", "24:00"]] }, delivery: false, fee: 0, methods: ["CASH"], onDuty: true },
+  { slug: "pharmacie-gbegamey", name: "Pharmacie Gbégamey (démo)", district: "Gbégamey", city: CITY, address: "Rue du Stade de l'Amitié", lat: 6.3722, lng: 2.4041, hours: week("08:00", "19:30"), delivery: true, fee: 1000, methods: ["CASH", "MOBILE_MONEY"], onDuty: false },
+  { slug: "pharmacie-de-fidjrosse", name: "Pharmacie de Fidjrossè (démo)", district: "Fidjrossè", city: CITY, address: "Route des Pêches", lat: 6.3652, lng: 2.3468, hours: week("08:00", "20:00", true, true), delivery: true, fee: 2000, methods: ["CASH", "MOBILE_MONEY", "CARD"], onDuty: false },
+  { slug: "pharmacie-de-godomey", name: "Pharmacie de Godomey (démo)", district: "Godomey", city: "Abomey-Calavi", address: "Carrefour Godomey", lat: 6.4098, lng: 2.3402, hours: week("08:00", "19:00"), delivery: false, fee: 0, methods: ["CASH"], onDuty: false },
 ];
 
 const products: { slug: string; name: string; dci: string; form: string; strength?: string; category: string; regulation: Regulation; price: number }[] = [
@@ -64,9 +68,34 @@ const PATTERNS: [StockStatus, StockSource, number | null][] = [
   ["OUT", "PHARMACY", 10],
 ];
 
+/** Champs réglementaires demandés aux pharmacies du Bénin (modifiables ensuite dans l'administration). */
+const BJ_PHARMACY_FIELDS = [
+  { key: "authorization", label: "N° d'autorisation d'ouverture (Ministère de la Santé / ABMed)", required: true },
+  { key: "orderNumber", label: "N° d'inscription du pharmacien titulaire à l'Ordre des pharmaciens du Bénin", required: true },
+  { key: "ifu", label: "IFU (Identifiant fiscal unique)", required: true },
+  { key: "rccm", label: "N° RCCM", required: false },
+];
+
+async function retireOldDemo() {
+  const old = await db.pharmacy.findMany({ where: { slug: { in: RETIRED_DEMO } }, select: { id: true } });
+  const ids = old.map((p) => p.id);
+  if (ids.length) {
+    await db.pharmacyRequest.deleteMany({ where: { pharmacyId: { in: ids } } });
+    await db.order.deleteMany({ where: { pharmacyId: { in: ids } } });
+    await db.pharmacy.deleteMany({ where: { id: { in: ids } } });
+  }
+  await db.zone.deleteMany({ where: { city: "Brazzaville" } });
+}
+
 async function main() {
+  await retireOldDemo();
+  await db.country.upsert({
+    where: { code: "BJ" },
+    update: {},
+    create: { code: "BJ", name: "Bénin", currency: "XOF", timezone: "Africa/Porto-Novo", dialCode: "+229", defaultCity: CITY, payoutMethods: ["MOBILE_MONEY", "MOOV_MONEY"], pharmacyFields: BJ_PHARMACY_FIELDS },
+  });
   for (const z of zones) {
-    await db.zone.upsert({ where: { name_city: { name: z.name, city: "Brazzaville" } }, update: {}, create: { ...z, city: "Brazzaville" } });
+    await db.zone.upsert({ where: { name_city: { name: z.name, city: z.city } }, update: {}, create: { ...z, country: "BJ" } });
   }
   const password = process.env.DEMO_PHARMACY_PASSWORD;
   const productRows = [];
@@ -84,17 +113,25 @@ async function main() {
         name: ph.name,
         address: ph.address,
         district: ph.district,
-        city: "Brazzaville",
+        city: ph.city,
+        country: "BJ",
         lat: ph.lat,
         lng: ph.lng,
-        phone: `+24206${String(5550000 + i * 111).slice(0, 7)}`,
-        whatsapp: `+24206${String(5550000 + i * 111).slice(0, 7)}`,
+        phone: `+22901900000${i}`,
+        whatsapp: `+22901900000${i}`,
         openingHours: ph.hours,
+        hoursConfirmedAt: new Date(),
         onDuty: ph.onDuty,
+        onDutyUntil: ph.onDuty ? new Date(Date.now() + 365 * 86400_000) : null,
         offersDelivery: ph.delivery,
         deliveryFee: ph.fee,
         paymentMethods: ph.methods,
       },
+    });
+    // Pharmacies fictives : horaires et garde reconfirmés à chaque déploiement pour que la démo reste vivante.
+    await db.pharmacy.update({
+      where: { id: pharmacy.id },
+      data: { hoursConfirmedAt: new Date(), onDutyUntil: ph.onDuty ? new Date(Date.now() + 365 * 86400_000) : null },
     });
     for (const [j, prod] of productRows.entries()) {
       const [status, source, age] = PATTERNS[(i * 3 + j) % PATTERNS.length];
@@ -127,12 +164,27 @@ async function main() {
     const email = "livreur@demo.pharma-ai.local";
     const existing = await db.courier.findUnique({ where: { email } });
     if (!existing) {
-      await db.courier.create({ data: { email, name: "Jonas (démo)", phone: "+242065550999", passwordHash: await bcrypt.hash(password, 10) } });
+      await db.courier.create({ data: { email, name: "Jonas (démo)", phone: "+2290190000099", passwordHash: await bcrypt.hash(password, 10) } });
     } else if (!(await bcrypt.compare(password, existing.passwordHash))) {
       await db.courier.update({ where: { email }, data: { passwordHash: await bcrypt.hash(password, 10) } });
     }
+    if (existing?.phone.startsWith("+242")) await db.courier.update({ where: { email }, data: { phone: "+2290190000099" } });
   }
+  await seedAdmin(password);
   console.log(`Données de démonstration prêtes : ${pharmacies.length} pharmacies, ${products.length} produits.`);
+}
+
+/**
+ * Compte d'administration : ADMIN_EMAIL + ADMIN_PASSWORD. À défaut, en démonstration seulement,
+ * admin@demo.pharma-ai.local avec le mot de passe des comptes de démo.
+ */
+async function seedAdmin(demoPassword: string | undefined) {
+  const email = (process.env.ADMIN_EMAIL || (demoPassword ? "admin@demo.pharma-ai.local" : "")).toLowerCase();
+  const pw = process.env.ADMIN_PASSWORD || (process.env.ADMIN_EMAIL ? "" : demoPassword);
+  if (!email || !pw) return;
+  const existing = await db.adminUser.findUnique({ where: { email } });
+  if (!existing) await db.adminUser.create({ data: { email, name: "Administration", passwordHash: await bcrypt.hash(pw, 10) } });
+  else if (!(await bcrypt.compare(pw, existing.passwordHash))) await db.adminUser.update({ where: { email }, data: { passwordHash: await bcrypt.hash(pw, 10) } });
 }
 
 main()

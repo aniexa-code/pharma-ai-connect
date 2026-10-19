@@ -2,8 +2,9 @@
 import { Prisma, type Pharmacy, type Stock } from "@prisma/client";
 import { db } from "../db";
 import { distanceKm, type Point } from "../geo";
-import { openStatus, type OpenStatus, type WeeklyHours } from "../hours";
+import { isOnDuty, pharmacyOpenStatus, type OpenStatus } from "../hours";
 import { reliability, type Reliability } from "../reliability";
+import { getSettings } from "../settings";
 
 // Recherche insensible à la casse et aux accents : « paracetamol » trouve « Paracétamol »,
 // « Talangai » trouve « Talangaï ». Les deux côtés sont ramenés à des minuscules sans accent.
@@ -49,14 +50,29 @@ export type PharmacyResult = {
   pharmacy: Pharmacy;
   distance: number | null;
   open: OpenStatus;
+  /** Garde en cours et valable (date de fin renseignée et non dépassée). */
+  onDuty: boolean;
   stock: Stock | null;
   reliability: Reliability | null;
 };
 
 const RANK: Record<string, number> = { AVAILABLE: 0, LOW: 1, UNKNOWN: 2, OUT: 3 };
 
+/** Quartier connu le plus proche d'une position (pour dire « près de Ganhi » plutôt que des coordonnées). */
+export async function nearestZone(point: Point) {
+  const zones = await db.zone.findMany();
+  let best: (typeof zones)[number] | null = null;
+  let bestKm = Infinity;
+  for (const z of zones) {
+    const km = distanceKm(point, z);
+    if (km < bestKm) [best, bestKm] = [z, km];
+  }
+  return best && bestKm <= 15 ? { ...best, km: bestKm } : null;
+}
+
 export async function searchPharmacies(opts: { productId?: string | null; point?: Point | null; radiusKm?: number; place?: string; now?: Date }) {
   const { productId, point, radiusKm = 5, now = new Date() } = opts;
+  const { search } = await getSettings();
   const pharmacies = await db.pharmacy.findMany({
     where: {
       active: true,
@@ -70,7 +86,8 @@ export async function searchPharmacies(opts: { productId?: string | null; point?
       return {
         pharmacy: p,
         distance: point ? distanceKm(point, p) : null,
-        open: openStatus(p.openingHours as WeeklyHours, p.onDuty, now),
+        open: pharmacyOpenStatus(p, now, search.hoursMaxAgeDays),
+        onDuty: isOnDuty(p, now),
         stock,
         reliability: productId ? reliability(stock, now) : null,
       };
@@ -85,4 +102,20 @@ export async function searchPharmacies(opts: { productId?: string | null; point?
     return (a.distance ?? 0) - (b.distance ?? 0);
   });
   return results;
+}
+
+/**
+ * Hors des heures d'ouverture habituelles (aucune pharmacie classique ouverte dans la zone),
+ * les pharmacies de garde passent en tête. Le tri reste stable pour le reste.
+ */
+export function prioritizeOnDuty(results: PharmacyResult[]) {
+  const night = results.length > 0 && !results.some((r) => r.open.open && !r.onDuty);
+  if (!night) return { results, night };
+  return { results: [...results.filter((r) => r.onDuty), ...results.filter((r) => !r.onDuty)], night };
+}
+
+/** Rayons plus larges à proposer quand rien de pertinent n'est trouvé (jamais appliqués sans l'accord du visiteur). */
+export function widerRadii(current: number, max: number) {
+  const steps = [5, 10, 20, max].filter((r) => r > current && r <= max);
+  return [...new Set(steps)].slice(0, 2);
 }

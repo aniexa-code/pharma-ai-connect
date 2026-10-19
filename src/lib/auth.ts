@@ -3,7 +3,7 @@ import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "./db";
-import { COURIER_COOKIE, CUSTOMER_COOKIE, CUSTOMER_MAX_AGE, PHARMACY_COOKIE, PHARMACY_MAX_AGE, signSession, verifySession } from "./session";
+import { ADMIN_COOKIE, ADMIN_MAX_AGE, COURIER_COOKIE, CUSTOMER_COOKIE, CUSTOMER_MAX_AGE, PHARMACY_COOKIE, PHARMACY_MAX_AGE, signSession, verifySession } from "./session";
 
 /** Client connecté (facultatif) : null pour un visiteur, ce qui ne bloque aucun parcours. */
 export const getCustomer = cache(async () => {
@@ -66,8 +66,26 @@ export async function startCourierSession(id: string) {
   (await cookies()).set(COURIER_COOKIE, await signSession({ uid: id, kind: "COURIER" }, PHARMACY_MAX_AGE), cookieOpts(PHARMACY_MAX_AGE));
 }
 
-export async function endSession(kind: "CUSTOMER" | "PHARMACY" | "COURIER") {
-  (await cookies()).delete(kind === "CUSTOMER" ? CUSTOMER_COOKIE : kind === "PHARMACY" ? PHARMACY_COOKIE : COURIER_COOKIE);
+export const getAdmin = cache(async () => {
+  const s = await verifySession((await cookies()).get(ADMIN_COOKIE)?.value);
+  if (!s || s.kind !== "ADMIN") return null;
+  return db.adminUser.findFirst({ where: { id: s.uid, active: true } });
+});
+
+export async function requireAdmin() {
+  const a = await getAdmin();
+  if (!a) redirect("/admin/connexion");
+  return a;
+}
+
+export async function startAdminSession(id: string) {
+  (await cookies()).set(ADMIN_COOKIE, await signSession({ uid: id, kind: "ADMIN" }, ADMIN_MAX_AGE), cookieOpts(ADMIN_MAX_AGE));
+}
+
+const COOKIE_OF = { CUSTOMER: CUSTOMER_COOKIE, PHARMACY: PHARMACY_COOKIE, COURIER: COURIER_COOKIE, ADMIN: ADMIN_COOKIE } as const;
+
+export async function endSession(kind: keyof typeof COOKIE_OF) {
+  (await cookies()).delete(COOKIE_OF[kind]);
 }
 
 export async function clientIp() {

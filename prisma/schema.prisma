@@ -17,14 +17,66 @@ datasource db {
 
 // ---------- Référentiel ----------
 
+/// Pays ouverts sur la plateforme : devise, fuseau horaire et règles locales.
+/// Toutes les règles financières et de recherche sont dans Setting, jamais dans le code.
+model Country {
+  code          String   @id // ISO 3166-1 alpha-2 : BJ, CG...
+  name          String
+  currency      String   // XOF, XAF...
+  timezone      String   // Africa/Porto-Novo...
+  dialCode      String   // +229
+  defaultCity   String
+  /// Moyens de paiement des gains (livreurs, pharmacies) : MOBILE_MONEY, MOOV_MONEY...
+  payoutMethods String[]
+  /// Champs réglementaires demandés à l'inscription d'une pharmacie : [{ key, label, required, hint }]
+  pharmacyFields Json    @default("[]")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
 model Zone {
   id       String @id @default(cuid())
   name     String // quartier ou arrondissement
   city     String
+  country  String @default("BJ")
   lat      Float
   lng      Float
 
   @@unique([name, city])
+}
+
+/// Réglages modifiables depuis l'administration. key = "global" ou code pays ; value = réglages partiels
+/// fusionnés avec les valeurs par défaut de src/lib/settings.ts.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+/// Journal d'audit : toute action sensible (réglage, validation, suspension, paiement...) y laisse une trace.
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorType String   // ADMIN, PHARMACY, COURIER, CUSTOMER, SYSTEM
+  actorId   String?
+  action    String   // ex. SETTINGS_UPDATED, PHARMACY_VERIFIED
+  entity    String   // ex. Setting:BJ, Pharmacy:xxx
+  before    Json?
+  after     Json?
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, createdAt])
+  @@index([createdAt])
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
 }
 
 model Pharmacy {
@@ -34,6 +86,7 @@ model Pharmacy {
   address         String
   district        String
   city            String
+  country         String   @default("BJ")
   lat             Float
   lng             Float
   phone           String
@@ -41,7 +94,11 @@ model Pharmacy {
   email           String?
   /// Horaires hebdomadaires : { "1": [["08:00","20:00"]], ... } (0 = dimanche)
   openingHours    Json
+  /// Date à laquelle la pharmacie a confirmé ses horaires : trop ancienne, le statut « ouvert » n'est plus affiché.
+  hoursConfirmedAt DateTime?
   onDuty          Boolean  @default(false) // pharmacie de garde
+  /// Fin de la garde déclarée : sans date ou date passée, la pharmacie n'est pas présentée comme de garde.
+  onDutyUntil     DateTime?
   offersPickup    Boolean  @default(true)
   offersDelivery  Boolean  @default(false)
   deliveryFee     Int      @default(0)

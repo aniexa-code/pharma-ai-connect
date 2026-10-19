@@ -8,7 +8,11 @@ import { requirePharmacyUser } from "@/lib/auth";
 import { availability, relativeTime } from "@/lib/availability";
 import { currency } from "@/lib/config";
 import { db } from "@/lib/db";
+import { isOnDuty, utcToZonedWallTime } from "@/lib/hours";
+import { getSettings } from "@/lib/settings";
+import { timezone } from "@/lib/config";
 import { pharmacyLogout, quickRespond, updateStock } from "./actions";
+import { HoursDutyPanel } from "./forms";
 
 export const metadata: Metadata = { title: "Centre de contrôle pharmacie", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -31,6 +35,15 @@ export default async function PharmacyDashboard() {
     db.stock.count({ where: { pharmacyId: pid, source: "PHARMACY", status: { in: ["AVAILABLE", "LOW"] }, confirmedAt: { gte: today } } }),
     db.order.count({ where: { pharmacyId: pid, createdAt: { gte: today } } }),
   ]);
+  const now = new Date();
+  const { search } = await getSettings(u.pharmacy.country);
+  const tz = timezone(u.pharmacy.country);
+  const fmt = (d: Date) => d.toLocaleString("fr-FR", { timeZone: tz, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+  const confirmedAt = u.pharmacy.hoursConfirmedAt;
+  const hoursStale = !confirmedAt || now.getTime() - confirmedAt.getTime() > search.hoursMaxAgeDays * 86_400_000;
+  const onDutyNow = isOnDuty(u.pharmacy, now);
+  const tomorrow8 = new Date(now.getTime() + 86_400_000);
+  const defaultUntil = utcToZonedWallTime(onDutyNow ? u.pharmacy.onDutyUntil! : tomorrow8, tz).slice(0, 11) + "08:00";
   const waitingOrders = orders.filter((o) => ["PLACED", "PRESCRIPTION_REVIEW"].includes(o.status)).length;
   const productName = new Map(stocks.map((s) => [s.productId, `${s.product.name} ${s.product.strength ?? ""}`.trim()]));
   const kpis: { label: string; value: number; icon: IconName; accent?: boolean }[] = [
@@ -70,6 +83,21 @@ export default async function PharmacyDashboard() {
           </div>
         </div>
       </section>
+
+      <Card>
+        <HoursDutyPanel
+          hoursLabel={
+            hoursStale
+              ? `À reconfirmer : les visiteurs voient « Horaires à confirmer » tant que vous ne les avez pas confirmés (validité ${search.hoursMaxAgeDays} jours).`
+              : `Confirmés le ${confirmedAt!.toLocaleDateString("fr-FR", { timeZone: tz })}.`
+          }
+          stale={hoursStale}
+          onDuty={onDutyNow}
+          dutyLabel={onDutyNow ? `De garde jusqu'au ${fmt(u.pharmacy.onDutyUntil!)}.` : null}
+          defaultUntil={defaultUntil}
+          minUntil={utcToZonedWallTime(now, tz)}
+        />
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <Card className="space-y-3">
@@ -135,7 +163,7 @@ export default async function PharmacyDashboard() {
                   <th className="px-2 py-2">Dosage</th>
                   <th className="px-2 py-2">Disponibilité</th>
                   <th className="px-2 py-2">Quantité</th>
-                  <th className="px-2 py-2">Prix ({currency() === "XAF" ? "FCFA" : currency()})</th>
+                  <th className="px-2 py-2">Prix ({["XAF", "XOF"].includes(currency(u.pharmacy.country)) ? "FCFA" : currency(u.pharmacy.country)})</th>
                   <th className="px-2 py-2">Dernière mise à jour</th>
                 </tr>
               </thead>

@@ -33,6 +33,8 @@ export function LocateButton() {
         (form.elements.namedItem("lng") as HTMLInputElement).value = pos.coords.longitude.toFixed(5);
         (form.elements.namedItem("lieu") as HTMLInputElement).value = "Ma position";
         setState("ok");
+        // La permission vient d'être accordée : on lance directement la recherche autour de la position.
+        form.requestSubmit();
       },
       () => setState("denied"),
       { timeout: 10000, maximumAge: 300000 },
@@ -41,7 +43,7 @@ export function LocateButton() {
   return (
     <button type="button" onClick={locate} className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue underline-offset-2 hover:underline">
       <span className={`h-2 w-2 rounded-full ${state === "ok" ? "bg-turq" : state === "busy" ? "animate-pulse bg-warn" : "bg-blue/40"}`} />
-      {state === "busy" ? "Localisation…" : state === "ok" ? "Position utilisée" : state === "denied" ? "Position indisponible : saisissez un lieu" : "Utiliser ma position (facultatif)"}
+      {state === "busy" ? "Localisation…" : state === "ok" ? "Recherche autour de vous…" : state === "denied" ? "Position indisponible : saisissez un lieu" : "Utiliser ma position"}
     </button>
   );
 }

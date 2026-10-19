@@ -2,9 +2,10 @@ import type { OrderStatus } from "@prisma/client";
 import { STATUS_LABEL } from "@/lib/services/orders";
 import { STATE_COLOR, availability, type Availability, type AvailabilityState } from "@/lib/availability";
 import type { Reliability } from "@/lib/reliability";
+import { timezone } from "@/lib/config";
 import { Badge, type Tone } from "./ui";
 
-const fmt = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short", timeZone: process.env.TIMEZONE || "Africa/Brazzaville" });
+const fmt = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short", timeZone: timezone() });
 export const formatDate = (d: Date) => fmt.format(d);
 
 /** Point de statut. Disponible : léger halo turquoise. Juste confirmé : passage animé de l'orange au turquoise. */

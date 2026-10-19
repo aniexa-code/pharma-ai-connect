@@ -63,7 +63,7 @@ export async function addAddress(fd: FormData) {
   const line = String(fd.get("line") ?? "").trim().slice(0, 200);
   if (label && line)
     await db.address.create({
-      data: { customerId: c.id, label, line, district: String(fd.get("district") ?? "").trim() || null, city: String(fd.get("city") ?? "Brazzaville").trim() },
+      data: { customerId: c.id, label, line, district: String(fd.get("district") ?? "").trim() || null, city: String(fd.get("city") ?? "Cotonou").trim() },
     });
   revalidatePath("/compte");
 }

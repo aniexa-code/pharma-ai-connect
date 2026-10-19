@@ -53,15 +53,15 @@ npm run setup             # crée les tables et les données de démonstration
 npm run dev
 ```
 
-Données de démonstration : 6 pharmacies fictives à Brazzaville, 14 produits. Espace pharmacie : `<slug>@demo.pharma-ai.local` (ex. `pharmacie-du-plateau@demo.pharma-ai.local`). Centre de livraison : `livreur@demo.pharma-ai.local`. Mot de passe : `DEMO_PHARMACY_PASSWORD` (pour le changer, modifiez la variable puis redéployez : les comptes de démo sont mis à jour).
+Données de démonstration : 6 pharmacies fictives à Cotonou et Abomey-Calavi (Bénin, XOF), 14 produits. Espace pharmacie : `<slug>@demo.pharma-ai.local` (ex. `pharmacie-de-ganhi@demo.pharma-ai.local`). Centre de livraison : `livreur@demo.pharma-ai.local`. Administration (`/admin`) : `ADMIN_EMAIL`, ou `admin@demo.pharma-ai.local` en démonstration. Mot de passe : `DEMO_PHARMACY_PASSWORD` (pour le changer, modifiez la variable puis redéployez : les comptes de démo sont mis à jour).
 
 ## Tests
 
 Les tests utilisent une base PostgreSQL dont le nom contient « test » (voir `.env.test`).
 
 ```bash
-npm test          # 24 tests d'acceptation et de sécurité (services)
-npm run build && npm run test:e2e   # parcours complet dans Chromium (11 étapes, livreur compris)
+npm test          # 36 tests (acceptation, sécurité, zone de recherche, réglages)
+npm run build && npm run test:e2e   # parcours complet dans Chromium (13 étapes, livreur et administration compris)
 ```
 
 Le test exigé au § 9 (« personne ne peut consulter la commande d'un autre en devinant ou en connaissant son numéro ») est couvert par `tests/security.test.ts` et l'étape 7 de `tests/e2e/run.ts`.
@@ -70,12 +70,18 @@ Le test exigé au § 9 (« personne ne peut consulter la commande d'un autre en 
 
 1. Importer le dépôt dans Vercel (Framework : Next.js). La commande de build `vercel-build` crée les tables et les données de démonstration à chaque déploiement, sans écraser les données existantes.
 2. Storage → Neon → créer la base : `DATABASE_URL` et `DATABASE_URL_UNPOOLED` sont ajoutées automatiquement.
-3. Variables d'environnement : `AUTH_SECRET` (64 caractères aléatoires), `NEXT_PUBLIC_SITE_URL` (adresse du site), `CURRENCY`, `TIMEZONE`, `PAYMENT_PROVIDER`, `DEMO_PHARMACY_PASSWORD`.
+3. Variables d'environnement : `AUTH_SECRET` (64 caractères aléatoires), `NEXT_PUBLIC_SITE_URL` (adresse du site), `DEFAULT_COUNTRY` (BJ par défaut), `PAYMENT_PROVIDER`, `DEMO_PHARMACY_PASSWORD`, et pour l'administration `ADMIN_EMAIL` + `ADMIN_PASSWORD`. Les anciennes variables `CURRENCY` et `TIMEZONE` sont ignorées : devise et fuseau viennent du pays.
 4. Facultatif : `RESEND_API_KEY` + `MAIL_FROM` pour les e-mails, `TWILIO_*` pour les SMS et WhatsApp. Sans eux, les notifications sont enregistrées en mode « simulé » et restent visibles sur le lien de suivi.
 5. `DEMO_MODE=true` affiche à l'écran les codes de vérification non envoyés : utile pour une démo, **à ne jamais activer en production réelle**.
+
+## Réglages et administration
+
+Aucune règle commerciale n'est figée dans le code : rayon de recherche (par défaut, proposés, maximum), validité des horaires déclarés, frais de service, barème de livraison (minimum, prise en charge, par km, supplément de nuit, regroupement), commission, seuil de retrait des livreurs, abonnements et délai de grâce se règlent dans `/admin/reglages`, pays par pays. Chaque modification est tracée (auteur, date, valeurs avant / après) dans le journal d'audit.
+
+Une pharmacie n'est jamais affichée « ouverte » sur des données périmées : ses horaires doivent être reconfirmés depuis son espace (validité réglable), et une garde se déclare avec une heure de fin, au-delà de laquelle elle disparaît d'elle-même.
 
 ## Limites connues de cette version
 
 - Paiement en ligne : prestataire simulé (`PAYMENT_PROVIDER=sandbox`). Brancher un vrai prestataire Mobile Money / carte revient à appeler `applyPaymentResult` depuis son webhook signé.
 - Pas de téléversement d'ordonnance : l'ordonnance originale est vérifiée au comptoir (collecte de données de santé réduite au strict nécessaire).
-- Les zones géographiques reconnues sont celles de la table `Zone` (quartiers de Brazzaville en démo).
+- Les zones géographiques reconnues sont celles de la table `Zone` (quartiers de Cotonou en démo).

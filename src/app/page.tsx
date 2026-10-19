@@ -1,3 +1,4 @@
+import { countryInfo } from "@/lib/config";
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/brand";
 import { FloatingMeds, HeroNetwork } from "@/components/HeroArt";
@@ -20,7 +21,7 @@ const SERVICES: { title: string; text: string; icon: IconName }[] = [
 const SUGGESTIONS = ["Paracétamol", "Sels de réhydratation", "Test paludisme", "Vitamine C"];
 
 export default async function Home() {
-  const center = await resolvePlace("Brazzaville");
+  const center = await resolvePlace(countryInfo().defaultCity);
   const nearby = (await searchPharmacies({ point: center, radiusKm: 50 })).slice(0, 5);
   const updates = await lastStockUpdates(nearby.map((r) => r.pharmacy.id));
   const items = nearby.map((r) => toMapItem(r, { lastUpdate: updates.get(r.pharmacy.id) }));
