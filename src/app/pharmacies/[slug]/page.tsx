@@ -14,6 +14,7 @@ import { formatDistance } from "@/lib/geo";
 import { hoursLines, isOnDuty, pharmacyOpenStatus, type WeeklyHours } from "@/lib/hours";
 import { getSettings } from "@/lib/settings";
 import { directionsUrl } from "@/lib/map-items";
+import { pharmacyRating } from "@/lib/services/reviews";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export default async function PharmacyPage({ params, searchParams }: { params: P
   const focusA = focus ? availability(focus) : null;
   const focusOrderable = focus && focus.product.regulation !== "RESTRICTED" && focus.status !== "OUT";
   const distance = Number(sp.d);
+  const rating = await pharmacyRating(p.id);
 
   return (
     <div className="space-y-6">
@@ -62,6 +64,10 @@ export default async function PharmacyPage({ params, searchParams }: { params: P
             <p className={`inline-flex items-center gap-2 text-sm font-bold ${open.open ? "text-navy" : "text-muted"}`}>
               <span className={`h-2.5 w-2.5 rounded-full ${open.open ? "bg-turq" : "bg-faint"}`} />{open.label}
             </p>
+            {rating.count > 0 && (
+              <p className="text-sm text-muted" data-testid="rating"><span className="font-bold text-navy">★ {rating.average!.toLocaleString("fr-FR")}</span> / 5 · {rating.count} avis client{rating.count > 1 ? "s" : ""}</p>
+            )}
+            {rating.recent.map((r) => <p key={r.id} className="max-w-xl text-sm italic text-muted">« {r.comment} »</p>)}
           </div>
           <div className="flex flex-wrap gap-2">
             <a href={directionsUrl(p)} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary")}><Icon name="route" size={18} />Itinéraire</a>

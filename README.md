@@ -127,6 +127,25 @@ Un déclencheur PostgreSQL, installé par le seed, interdit toute modification o
 - ne peut marquer un retrait comme payé qu'avec la référence de la transaction ;
 - peut le refuser, et le montant est alors recrédité au livreur.
 
+## Abonnements des pharmacies et avis
+
+**Essai et formules.** Une pharmacie validée commence par un essai gratuit, dont la durée est un réglage. Elle choisit ensuite sa formule dans `/pharmacie/abonnement` :
+- un forfait mensuel, trimestriel ou annuel ;
+- ou le modèle sans abonnement, facturé chaque mois en pourcentage des ventes inscrites au grand livre.
+
+Tous les montants et délais sont des réglages de l'administration. Les pharmacies de démonstration ne sont jamais facturées.
+
+**Facturation quotidienne.** La route `/api/cron/billing`, déclarée dans `vercel.json` et protégée par `CRON_SECRET`, tourne chaque jour :
+- elle émet la facture de renouvellement quelques jours avant l'échéance (rappel) ;
+- elle passe la pharmacie en retard à l'échéance ;
+- elle la suspend automatiquement après le délai de grâce. Une pharmacie suspendue disparaît de la recherche et ne reçoit plus de commandes, mais garde l'accès à son espace pour payer.
+
+Une facture n'est réglée que sur preuve : soit un paiement confirmé par le prestataire, soit une référence de transaction saisie par l'administration dans `/admin/abonnements`. Le règlement réactive la pharmacie immédiatement.
+
+À configurer sur Vercel : la variable `CRON_SECRET`. Sans elle, la route refuse de s'exécuter. L'administration peut aussi lancer la facturation à la main.
+
+**Avis.** Une fois la commande clôturée, le client peut noter la pharmacie et le livreur, une seule fois par commande. La note moyenne et les derniers commentaires s'affichent sur la fiche de la pharmacie. L'administration peut masquer un avis depuis « Réclamations ».
+
 ## Limites connues de cette version
 
 - Paiement en ligne : prestataire simulé (`PAYMENT_PROVIDER=sandbox`). Brancher un vrai prestataire Mobile Money / carte revient à appeler `applyPaymentResult` depuis son webhook signé.

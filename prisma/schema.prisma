@@ -122,6 +122,7 @@ model Pharmacy {
   orders       Order[]
   favoritedBy  FavoritePharmacy[]
   stockImports StockImport[]
+  subscription Subscription?
 }
 
 enum Regulation {
@@ -641,4 +642,82 @@ model PayoutRequest {
 
   @@index([courierId, createdAt])
   @@index([status])
+}
+
+// ---------- Abonnements des pharmacies (SaaS) ----------
+
+enum BillingModel {
+  SUBSCRIPTION // forfait mensuel, trimestriel ou annuel
+  COMMISSION // pas de forfait : pourcentage des ventes réalisées via la plateforme
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE // échéance impayée, encore dans le délai de grâce
+  SUSPENDED // impayé au-delà du délai de grâce : la pharmacie ne reçoit plus de commandes
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  pharmacyId       String             @unique
+  model            BillingModel       @default(SUBSCRIPTION)
+  plan             String? // MONTHLY, QUARTERLY, ANNUAL
+  status           SubscriptionStatus @default(TRIAL)
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime?
+  /// Pharmacies de démonstration : jamais facturées ni suspendues.
+  exempt           Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  pharmacy Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+}
+
+enum InvoiceStatus {
+  DUE
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  subscriptionId String
+  pharmacyId     String
+  kind           String // SUBSCRIPTION, COMMISSION
+  label          String
+  /// Clé d'unicité : une seule facture par période et par nature.
+  periodKey      String        @unique
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  amount         Int
+  currency       String
+  status         InvoiceStatus @default(DUE)
+  dueAt          DateTime
+  paidAt         DateTime?
+  provider       String?
+  providerRef    String?
+  createdAt      DateTime      @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId, status])
+  @@index([status, dueAt])
+}
+
+// ---------- Avis ----------
+
+model Review {
+  id             String   @id @default(cuid())
+  orderId        String   @unique
+  pharmacyId     String
+  courierId      String?
+  pharmacyRating Int
+  courierRating  Int?
+  comment        String?
+  hidden         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([pharmacyId, createdAt])
 }

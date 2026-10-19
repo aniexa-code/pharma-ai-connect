@@ -2,7 +2,7 @@
 import { useActionState, useState } from "react";
 import { SubmitButton } from "@/components/client";
 import { Alert, Field, Input, Select, Textarea } from "@/components/ui";
-import { askRecoveryCode, closeOrder, confirmOrder, confirmRecoveryCode, createAccountAfterOrder, sendOrderMessage } from "./actions";
+import { askRecoveryCode, closeOrder, confirmOrder, confirmRecoveryCode, createAccountAfterOrder, reviewOrder, sendOrderMessage } from "./actions";
 
 export function RecoveryForm() {
   const [asked, ask] = useActionState(askRecoveryCode, {});
@@ -174,5 +174,36 @@ export function CloseOrderForm({ token, pickup }: { token: string; pickup: boole
       )}
       <Alert>{state.error}</Alert>
     </div>
+  );
+}
+
+function Stars({ name, label }: { name: string; label: string }) {
+  return (
+    <fieldset className="space-y-1">
+      <legend className="text-sm font-semibold text-navy">{label}</legend>
+      <div className="flex flex-wrap gap-1.5">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <label key={n} className="flex min-h-10 cursor-pointer items-center rounded-full border border-line px-3 text-sm font-bold text-navy has-[:checked]:border-warn has-[:checked]:bg-warn-50">
+            <input type="radio" name={name} value={n} required className="sr-only" />
+            {n} ★
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+export function ReviewForm({ token, courier }: { token: string; courier: boolean }) {
+  const [state, action] = useActionState(reviewOrder, {});
+  if (state.info) return <Alert tone="green">{state.info}</Alert>;
+  return (
+    <form action={action} className="space-y-3" data-testid="review-form">
+      <input type="hidden" name="token" value={token} />
+      <Stars name="pharmacyRating" label="La pharmacie" />
+      {courier && <Stars name="courierRating" label="Le livreur" />}
+      <Textarea name="comment" rows={2} maxLength={500} placeholder="Un commentaire ? (facultatif, visible sur la fiche de la pharmacie)" />
+      <Alert>{state.error}</Alert>
+      <SubmitButton variant="secondary">Envoyer mon avis</SubmitButton>
+    </form>
   );
 }

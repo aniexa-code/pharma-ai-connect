@@ -3,12 +3,13 @@ import Link from "next/link";
 import { OrderStatusBadge } from "@/components/badges";
 import { Icon, type IconName } from "@/components/brand";
 import { AutoRefresh } from "@/components/client";
-import { ButtonLink, Card } from "@/components/ui";
+import { Alert, ButtonLink, Card } from "@/components/ui";
 import { requirePharmacyUser } from "@/lib/auth";
 import { relativeTime } from "@/lib/availability";
 import { db } from "@/lib/db";
 import { isOnDuty, utcToZonedWallTime } from "@/lib/hours";
 import { getSettings } from "@/lib/settings";
+import { billingOverview } from "@/lib/services/billing";
 import { timezone } from "@/lib/config";
 import { pharmacyLogout, quickRespond } from "./actions";
 import { HoursDutyPanel } from "./forms";
@@ -20,6 +21,34 @@ function startOfDay() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
+}
+
+/** Abonnement : essai qui se termine, échéance impayée ou suspension, avec le lien pour régler. */
+async function BillingBanner({ pharmacyId }: { pharmacyId: string }) {
+  const { subscription: s, due, daysLeft } = await billingOverview(pharmacyId);
+  const { billing } = await getSettings();
+  if (s.exempt) return null;
+  const soon = daysLeft !== null && daysLeft <= billing.reminderDays && !due.length;
+  if (s.status === "ACTIVE" && !soon && !due.length) return null;
+  const tone = s.status === "SUSPENDED" ? "red" : s.status === "PAST_DUE" || due.length ? "amber" : "blue";
+  const text =
+    s.status === "SUSPENDED"
+      ? "Votre pharmacie est suspendue pour impayé : elle n'est plus visible et ne reçoit plus de commandes. Réglez la facture pour la réactiver immédiatement."
+      : s.status === "PAST_DUE"
+        ? `Paiement en retard : réglez votre facture avant ${billing.graceDays} jours après l'échéance pour éviter la suspension.`
+        : s.status === "TRIAL"
+          ? `Essai gratuit : ${Math.max(0, daysLeft ?? 0)} jour${(daysLeft ?? 0) > 1 ? "s" : ""} restant${(daysLeft ?? 0) > 1 ? "s" : ""}. Choisissez votre formule pour continuer sans interruption.`
+          : `Votre abonnement arrive à échéance dans ${daysLeft} jour${(daysLeft ?? 0) > 1 ? "s" : ""}.`;
+  return (
+    <div data-testid="billing-banner">
+      <Alert tone={tone}>
+        <span className="flex flex-wrap items-center justify-between gap-3">
+          <span>{text}</span>
+          <Link href="/pharmacie/abonnement" className="font-bold underline">Mon abonnement</Link>
+        </span>
+      </Alert>
+    </div>
+  );
 }
 
 export default async function PharmacyDashboard() {
@@ -65,6 +94,7 @@ export default async function PharmacyDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <span className="rounded-full bg-white/10 px-3 py-1 [&_span]:text-white/80"><AutoRefresh seconds={30} /></span>
+            <Link href="/pharmacie/abonnement" className="inline-flex min-h-10 items-center rounded-xl border border-white/20 px-3 text-sm font-semibold text-white/80 hover:bg-white/10">Abonnement</Link>
             <form action={pharmacyLogout}>
               <button className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/20 px-3 text-sm font-semibold text-white/80 hover:bg-white/10"><Icon name="logout" size={16} />Quitter</button>
             </form>
@@ -83,6 +113,8 @@ export default async function PharmacyDashboard() {
           </div>
         </div>
       </section>
+
+      <BillingBanner pharmacyId={pid} />
 
       <Card>
         <HoursDutyPanel

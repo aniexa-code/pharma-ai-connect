@@ -320,6 +320,15 @@ async function main() {
       await closure.getByRole("button", { name: "J'ai bien reçu ma commande" }).click();
       await client.getByText("Commande clôturée").waitFor();
       assert.ok((await db.order.findFirstOrThrow({ where: { publicRef: dref } })).closedAt, "commande clôturée par toutes les parties");
+      // Avis, possible une fois la commande clôturée, visible sur la fiche de la pharmacie.
+      const review = client.getByTestId("review-form");
+      await review.locator("label", { hasText: "5 ★" }).first().click();
+      await review.locator("label", { hasText: "4 ★" }).nth(1).click();
+      await review.locator("textarea[name=comment]").fill("Livraison rapide, produits bien emballés.");
+      await review.getByRole("button", { name: "Envoyer mon avis" }).click();
+      await client.getByText(/Merci pour votre avis/).waitFor();
+      await client.goto(`${BASE}/pharmacies/pharmacie-de-ganhi`);
+      assert.match(await client.getByTestId("rating").innerText(), /★ 5 \/ 5 · 1 avis client/);
     });
 
     await check("commander sur deux pharmacies avec un seul panier", async () => {
@@ -418,6 +427,17 @@ async function main() {
 
       await owner.goto(`${BASE}/pharmacie`);
       await owner.getByTestId("stock-summary").waitFor();
+      // Abonnement : essai gratuit dès la validation, puis formule choisie et réglée en ligne.
+      assert.match(await owner.getByTestId("billing-banner").innerText(), /Essai gratuit : 14 jours restants/);
+      await owner.getByRole("link", { name: "Mon abonnement" }).click();
+      const choice = owner.getByTestId("billing-choice");
+      await choice.locator("label", { hasText: "Forfait trimestriel" }).click();
+      await choice.getByRole("button", { name: "Enregistrer ma formule" }).click();
+      await owner.getByTestId("invoices-due").waitFor();
+      await shot(owner, "abonnement");
+      await owner.getByTestId("pay-invoice").getByRole("button", { name: /^Payer/ }).click();
+      await owner.getByTestId("invoices-due").waitFor({ state: "detached" });
+      assert.equal(await owner.getByTestId("subscription-status").innerText(), "Actif");
       await owner.close();
       assert.equal((await client.goto(`${BASE}/pharmacies/pharmacie-etoile-du-port`))?.status(), 200, "visible après validation");
       await client.goto(`${BASE}/livreur/inscription`);

@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/admin/inscriptions", label: "Inscriptions" },
   { href: "/admin/reclamations", label: "Réclamations" },
   { href: "/admin/finances", label: "Finances" },
+  { href: "/admin/abonnements", label: "Abonnements" },
   { href: "/admin/reglages", label: "Réglages" },
 ];
 

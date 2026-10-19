@@ -138,6 +138,8 @@ async function main() {
       // Zone de livraison couvrant l'agglomération : la distance réelle est désormais contrôlée à la confirmation.
       data: { hoursConfirmedAt: new Date(), onDutyUntil: ph.onDuty ? new Date(Date.now() + 365 * 86400_000) : null, deliveryRadiusKm: DEMO_DELIVERY_RADIUS_KM },
     });
+    // Pharmacies fictives : jamais facturées ni suspendues.
+    await db.subscription.upsert({ where: { pharmacyId: pharmacy.id }, update: { exempt: true, status: "ACTIVE" }, create: { pharmacyId: pharmacy.id, model: "COMMISSION", status: "ACTIVE", exempt: true } });
     for (const [j, prod] of productRows.entries()) {
       const [status, source, age] = PATTERNS[(i * 3 + j) % PATTERNS.length];
       const base = products[j].price;
