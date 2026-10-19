@@ -53,7 +53,7 @@ npm run setup             # crée les tables et les données de démonstration
 npm run dev
 ```
 
-Données de démonstration : 6 pharmacies fictives à Brazzaville, 14 produits. Espace pharmacie : `<slug>@demo.pharma-ai.local` (ex. `pharmacie-du-plateau@demo.pharma-ai.local`). Centre de livraison : `livreur@demo.pharma-ai.local`. Mot de passe : `DEMO_PHARMACY_PASSWORD`.
+Données de démonstration : 6 pharmacies fictives à Brazzaville, 14 produits. Espace pharmacie : `<slug>@demo.pharma-ai.local` (ex. `pharmacie-du-plateau@demo.pharma-ai.local`). Centre de livraison : `livreur@demo.pharma-ai.local`. Mot de passe : `DEMO_PHARMACY_PASSWORD` (pour le changer, modifiez la variable puis redéployez : les comptes de démo sont mis à jour).
 
 ## Tests
 
