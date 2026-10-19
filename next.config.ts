@@ -16,6 +16,8 @@ const secretPageHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Imports de stock (CSV / Excel) envoyés par les pharmacies : 2 Mo de fichier au plus.
+  experimental: { serverActions: { bodySizeLimit: "3mb" } },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
