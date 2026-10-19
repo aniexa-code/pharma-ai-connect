@@ -28,9 +28,10 @@ const STEPS = ["Demande envoyée", "Pharmacie contactée", "Disponibilité confi
 function stepIndex(status: OrderStatus) {
   switch (status) {
     case "PRESCRIPTION_REVIEW":
-    case "AWAITING_PAYMENT":
     case "PLACED":
       return 1;
+    case "AWAITING_PAYMENT":
+    case "AWAITING_CUSTOMER":
     case "CONFIRMED":
       return 2;
     case "PREPARING":
@@ -48,7 +49,7 @@ function stepIndex(status: OrderStatus) {
   }
 }
 
-const STEP_STATUSES: OrderStatus[][] = [[], ["PRESCRIPTION_REVIEW", "AWAITING_PAYMENT", "PLACED"], ["CONFIRMED"], ["PREPARING"], ["READY_FOR_PICKUP", "COURIER_ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY"], ["DELIVERED", "COLLECTED"]];
+const STEP_STATUSES: OrderStatus[][] = [[], ["PRESCRIPTION_REVIEW", "PLACED"], ["AWAITING_CUSTOMER", "AWAITING_PAYMENT", "CONFIRMED"], ["PREPARING"], ["READY_FOR_PICKUP", "COURIER_ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY"], ["DELIVERED", "COLLECTED"]];
 
 /** Timeline de suivi : l'étape en cours pulse en turquoise. */
 export function OrderTimeline({ status, fulfillment, events, createdAt, detail }: { status: OrderStatus; fulfillment: "PICKUP" | "DELIVERY"; events: OrderEvent[]; createdAt: Date; detail?: string | null }) {

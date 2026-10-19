@@ -1,8 +1,8 @@
 "use client";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { SubmitButton } from "@/components/client";
-import { Alert, Field, Input, Textarea } from "@/components/ui";
-import { askRecoveryCode, confirmRecoveryCode, createAccountAfterOrder, sendOrderMessage } from "./actions";
+import { Alert, Field, Input, Select, Textarea } from "@/components/ui";
+import { askRecoveryCode, confirmOrder, confirmRecoveryCode, createAccountAfterOrder, sendOrderMessage } from "./actions";
 
 export function RecoveryForm() {
   const [asked, ask] = useActionState(askRecoveryCode, {});
@@ -71,6 +71,75 @@ export function AccountForm({ token, name, phone, email }: { token: string; name
       </label>
       <Alert>{state.error}</Alert>
       <SubmitButton>Créer mon compte</SubmitButton>
+    </form>
+  );
+}
+
+type ConfirmProps = {
+  token: string;
+  modes: ("PICKUP" | "DELIVERY")[];
+  preferred: "PICKUP" | "DELIVERY";
+  slots: string[];
+  slot: string;
+  address: string;
+  methods: { value: string; label: string }[];
+  preferredMethod: string;
+  totals: { pickup: string; delivery: string; fee: string };
+};
+
+export function ConfirmOrderForm(p: ConfirmProps) {
+  const [state, action] = useActionState(confirmOrder, {});
+  const [mode, setMode] = useState(p.modes.includes(p.preferred) ? p.preferred : p.modes[0]);
+  const methods = p.methods.filter((m) => mode !== "DELIVERY" || m.value !== "CASH");
+  const defaultMethod = methods.some((m) => m.value === p.preferredMethod) ? p.preferredMethod : methods[0]?.value;
+  return (
+    <form action={action} className="space-y-4" data-testid="confirm-form">
+      <input type="hidden" name="token" value={p.token} />
+      <fieldset className="space-y-2">
+        <legend className="mb-1 text-sm font-bold text-navy">Retrait ou livraison</legend>
+        <div className="flex flex-wrap gap-2">
+          {p.modes.map((m) => (
+            <label key={m} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-line px-3 text-sm font-semibold text-navy has-[:checked]:border-blue has-[:checked]:bg-blue-50/60">
+              <input type="radio" name="fulfillment" value={m} checked={mode === m} onChange={() => setMode(m)} className="accent-[#176B87]" />
+              {m === "PICKUP" ? "Retrait en pharmacie" : `Livraison (${p.totals.fee})`}
+            </label>
+          ))}
+        </div>
+        {p.modes.length === 1 && <p className="text-xs text-muted">La pharmacie autorise uniquement {p.modes[0] === "PICKUP" ? "le retrait" : "la livraison"} pour cette commande.</p>}
+      </fieldset>
+      {mode === "DELIVERY" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Adresse ou point de livraison"><Input name="deliveryAddress" required minLength={5} defaultValue={p.address} /></Field>
+          <Field label="Indications pour le livreur (facultatif)"><Input name="deliveryNotes" maxLength={300} /></Field>
+        </div>
+      )}
+      <Field label={mode === "PICKUP" ? "Créneau de retrait" : "Créneau de livraison"}>
+        <Select name="slot" defaultValue={p.slots.includes(p.slot) ? p.slot : p.slots[0]}>
+          {p.slots.map((s) => <option key={s}>{s}</option>)}
+        </Select>
+      </Field>
+      <fieldset className="space-y-2">
+        <legend className="mb-1 text-sm font-bold text-navy">Paiement</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {methods.map((m) => (
+            <label key={`${mode}-${m.value}`} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-line px-3 text-sm font-semibold text-navy has-[:checked]:border-blue has-[:checked]:bg-blue-50/60">
+              <input type="radio" name="paymentMethod" value={m.value} defaultChecked={m.value === defaultMethod} className="accent-[#176B87]" />
+              {m.label}
+            </label>
+          ))}
+        </div>
+        {mode === "DELIVERY" && <p className="text-xs text-muted">Une livraison se règle en ligne, avant le départ du livreur.</p>}
+      </fieldset>
+      <p className="flex items-end justify-between rounded-2xl bg-navy p-4 text-white">
+        <span className="font-semibold">Total</span>
+        <span className="text-2xl font-extrabold text-turq">{mode === "DELIVERY" ? p.totals.delivery : p.totals.pickup}</span>
+      </p>
+      <Alert>{state.error}</Alert>
+      {methods.length === 0 ? (
+        <Alert tone="amber">Aucun paiement en ligne n'est disponible : choisissez le retrait, ou contactez la pharmacie.</Alert>
+      ) : (
+        <SubmitButton className="min-h-12 w-full text-base">Je confirme ma commande</SubmitButton>
+      )}
     </form>
   );
 }

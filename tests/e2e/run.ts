@@ -38,7 +38,7 @@ async function main() {
   // Un ancien serveur resté sur le port servirait une version périmée : on s'arrête net.
   const busy = await fetch(BASE).then(() => true, () => false);
   if (busy) throw new Error(`Le port ${PORT} est déjà utilisé : arrêtez l'ancien serveur avant de lancer les tests.`);
-  const server = spawn("npx", ["next", "start", "-p", String(PORT)], { env: { ...process.env, NODE_ENV: "production", DEMO_MODE: "true" }, stdio: "ignore" });
+  const server = spawn("npx", ["next", "start", "-p", String(PORT)], { env: { ...process.env, NODE_ENV: "production", DEMO_MODE: "true" }, stdio: "ignore", detached: true });
   try {
     for (let i = 0; i < 60; i++) {
       try {
@@ -148,11 +148,12 @@ async function main() {
       await client.fill("input[name=phone]", "+229 01 96 123 45 67");
       await client.check("input[name=paymentMethod][value=CASH]");
       await shot(client, "commande");
-      await client.click("text=Confirmer la demande");
+      await client.click("text=Envoyer à la pharmacie pour vérification");
       await client.waitForURL(/\/suivi\/[A-Za-z0-9_-]{43}\?nouvelle=1/);
       pickupUrl = client.url().split("?")[0];
       assert.match(await client.getByTestId("order-ref").innerText(), /^CMD-[2-9A-Z]{4}-[2-9A-Z]{4}$/);
-      assert.match(await client.getByTestId("handover-code").innerText(), /^\d{6}$/);
+      assert.match(await client.getByTestId("responsible").innerText(), /La pharmacie vérifie physiquement/);
+      assert.equal(await client.getByTestId("handover-code").count(), 0, "pas de code avant la confirmation du client");
       await shot(client, "confirmation");
     });
 
@@ -163,7 +164,7 @@ async function main() {
       await client.getByText("vous continuez sans compte").waitFor();
       const res = await client.goto(pickupUrl);
       assert.equal(res?.status(), 200);
-      assert.match(await client.getByTestId("order-status").innerText(), /attente de confirmation/);
+      assert.match(await client.getByTestId("order-status").innerText(), /vérification en pharmacie/);
       assert.match(await client.getByTestId("timeline").innerText(), /Demande envoyée[\s\S]*Pharmacie contactée[\s\S]*Terminée/);
     });
 
@@ -187,6 +188,32 @@ async function main() {
       await outsider.context().close();
     });
 
+    /** La pharmacie vérifie chaque produit en rayon et répond au client. */
+    async function verifyInPharmacy(slug: string, orderRef: string) {
+      await pharmacyLogin(pharmacist, slug);
+      await pharmacist.click(`text=${orderRef}`);
+      const form = pharmacist.getByTestId("verify-form");
+      await form.waitFor();
+      await form.getByRole("button", { name: "Envoyer la réponse au client" }).click();
+      await pharmacist.getByText("en attente de la confirmation du client").waitFor();
+    }
+
+    await check("la pharmacie vérifie en rayon, puis le client confirme sa commande", async () => {
+      await verifyInPharmacy("pharmacie-de-godomey", ref);
+      await shot(pharmacist, "verification-pharmacie");
+      await client.goto(pickupUrl);
+      const card = client.getByTestId("awaiting-customer");
+      await card.waitFor();
+      assert.match(await card.innerText(), /Disponible/);
+      assert.match(await client.getByTestId("responsible").innerText(), /Vous confirmez la commande/);
+      await shot(client, "a-confirmer");
+      await card.getByRole("button", { name: "Je confirme ma commande" }).click();
+      await client.waitForURL(/\?confirmee=1/);
+      assert.match(await client.getByTestId("handover-code").innerText(), /^\d{6}$/);
+      assert.match(await client.getByTestId("customer-authorization").innerText(), /CONFIRMÉE/);
+      assert.match(await client.getByTestId("order-status").innerText(), /Confirmée/);
+    });
+
     let deliveryUrl = "";
     await check("choisir la livraison et payer en ligne (Mobile Money)", async () => {
       await client.goto(`${BASE}/pharmacies/pharmacie-de-ganhi`);
@@ -200,7 +227,16 @@ async function main() {
       await client.selectOption("select[name=notifyChannel]", "LINK");
       await client.fill("input[name=phone]", "+229 01 95 765 43 21");
       await client.check("input[name=paymentMethod][value=MOBILE_MONEY]");
-      await client.click("text=Confirmer la demande");
+      await client.click("text=Envoyer à la pharmacie pour vérification");
+      await client.waitForURL(/\?nouvelle=1/);
+      const dref = await client.getByTestId("order-ref").innerText();
+      await verifyInPharmacy("pharmacie-de-ganhi", dref);
+      await client.reload();
+      const card = client.getByTestId("awaiting-customer");
+      assert.equal(await card.locator("input[name=fulfillment][value=DELIVERY]").isChecked(), true, "le choix initial du client est repris");
+      assert.equal(await card.locator("input[name=deliveryAddress]").inputValue(), "Rue 12.054, portail bleu, Agla");
+      assert.equal(await card.locator("input[name=paymentMethod][value=CASH]").count(), 0, "une livraison se paie en ligne");
+      await card.getByRole("button", { name: "Je confirme ma commande" }).click();
       await client.waitForURL(/\/paiement/);
       await client.getByRole("button", { name: "Simuler un échec" }).click();
       await client.getByText("Dernière tentative : échoué").waitFor();
@@ -215,14 +251,7 @@ async function main() {
     await check("suivre la livraison et recevoir les notifications nécessaires", async () => {
       const code = await client.getByTestId("handover-code").innerText();
       const dref = await client.getByTestId("order-ref").innerText();
-      await pharmacyLogin(pharmacist, "pharmacie-de-ganhi");
-      await pharmacist.click(`text=${dref}`);
-      const advance = async (label: string) => {
-        await pharmacist.getByRole("button", { name: `→ ${label}` }).click();
-        await pharmacist.getByText(label).first().waitFor();
-        await pharmacist.waitForLoadState("networkidle");
-      };
-      await advance("Confirmée par la pharmacie");
+      assert.match(await client.getByTestId("order-status").innerText(), /Confirmée/, "payée : la commande est confirmée et proposée aux livreurs");
 
       // Centre de livraison : le livreur voit la zone, accepte, récupère, livre avec le code du client.
       const courier = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
@@ -252,7 +281,7 @@ async function main() {
       await client.goto(deliveryUrl);
       assert.match(await client.getByTestId("order-status").innerText(), /Livrée/);
       const notes = await client.getByTestId("notifications").innerText();
-      for (const t of ["enregistrée", "Paiement reçu", "a échoué", "confirmée", "livreur (Jonas (démo))", "récupéré", "en cours de livraison", "a été livrée"])
+      for (const t of ["transmise à", "a vérifié votre commande", `Commande ${dref} confirmée`, "Paiement reçu", "a échoué", "confirmée", "livreur (Jonas (démo))", "récupéré", "en cours de livraison", "a été livrée"])
         assert.ok(notes.includes(t), `notification « ${t} »`);
       await shot(client, "suivi-livree");
     });
@@ -310,7 +339,12 @@ async function main() {
     await browser.close();
     console.log(`\nTous les critères d'acceptation passent (${step} étapes).`);
   } finally {
-    server.kill();
+    // npx lance next dans un sous-processus : on arrête tout le groupe, sinon le serveur survit au test.
+    try {
+      process.kill(-server.pid!, "SIGTERM");
+    } catch {
+      server.kill();
+    }
     await db.$disconnect();
   }
 }

@@ -2,7 +2,7 @@
 import { useActionState, type ReactNode } from "react";
 import { SubmitButton } from "@/components/client";
 import { Alert, Field, Input, Select, Textarea } from "@/components/ui";
-import { addStockAction, hoursAction, importStockAction, orderAction, pharmacyLogin, publishImportAction, respondToRequest } from "./actions";
+import { addStockAction, hoursAction, verifyOrderAction, importStockAction, orderAction, pharmacyLogin, publishImportAction, respondToRequest } from "./actions";
 
 export function PharmacyLoginForm() {
   const [state, action] = useActionState(pharmacyLogin, {});
@@ -148,6 +148,56 @@ export function PublishImportForm({ importId, count }: { importId: string; count
       <input type="hidden" name="importId" value={importId} />
       <Alert>{state.error}</Alert>
       <SubmitButton>{count > 1 ? `Publier les ${count} lignes correctes` : "Publier la ligne correcte"}</SubmitButton>
+    </form>
+  );
+}
+
+type VerifyItem = { id: string; name: string; quantity: number; unitPrice: number; prescription: boolean };
+
+export function VerifyOrderForm({ orderId, items, pickup, delivery, currencyLabel }: { orderId: string; items: VerifyItem[]; pickup: boolean; delivery: boolean; currencyLabel: string }) {
+  const [state, run] = useActionState(verifyOrderAction, {});
+  const prescription = items.some((i) => i.prescription);
+  if (state.info) return <Alert tone="green">{state.info}</Alert>;
+  return (
+    <form action={run} className="space-y-4" data-testid="verify-form">
+      <input type="hidden" name="orderId" value={orderId} />
+      <p className="text-sm text-muted">Vérifiez chaque produit en rayon. Le client verra votre réponse et les prix, puis confirmera lui-même sa commande.</p>
+      <ul className="space-y-3">
+        {items.map((i) => (
+          <li key={i.id} className="space-y-2 rounded-xl border border-line p-3">
+            <input type="hidden" name="itemId" value={i.id} />
+            <p className="text-sm font-bold text-navy">{i.name} × {i.quantity}{i.prescription ? " · sur ordonnance" : ""}</p>
+            <div className="grid gap-2 sm:grid-cols-[1.4fr_0.6fr_0.7fr]">
+              <Select name={`answer_${i.id}`} defaultValue="AVAILABLE" aria-label={`Réponse pour ${i.name}`}>
+                <option value="AVAILABLE">Disponible</option>
+                <option value="INSUFFICIENT">Quantité insuffisante</option>
+                <option value="UNAVAILABLE">Indisponible</option>
+                <option value="NEEDS_PHARMACIST">Nécessite validation du pharmacien</option>
+                <option value="OTHER">Autre précision</option>
+              </Select>
+              <Input name={`qty_${i.id}`} type="number" min={1} max={i.quantity - 1} placeholder="Qté dispo." aria-label={`Quantité disponible pour ${i.name}`} />
+              <Input name={`price_${i.id}`} type="number" min={1} defaultValue={i.unitPrice} aria-label={`Prix unitaire de ${i.name} (${currencyLabel})`} />
+            </div>
+            <Input name={`note_${i.id}`} maxLength={300} placeholder="Précision pour le client (facultatif, obligatoire pour « Autre »)" aria-label={`Précision pour ${i.name}`} />
+          </li>
+        ))}
+      </ul>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-bold text-navy">Remise autorisée</legend>
+        <div className="flex flex-wrap gap-2 text-sm">
+          {pickup && <label className="flex items-center gap-2 rounded-xl border border-line px-3 py-2"><input type="radio" name="modes" value="PICKUP_ONLY" defaultChecked={!delivery || prescription} /> Retrait uniquement</label>}
+          {delivery && !prescription && <label className="flex items-center gap-2 rounded-xl border border-line px-3 py-2"><input type="radio" name="modes" value="DELIVERY_ONLY" defaultChecked={!pickup} /> Livraison uniquement</label>}
+          {pickup && delivery && !prescription && <label className="flex items-center gap-2 rounded-xl border border-line px-3 py-2"><input type="radio" name="modes" value="BOTH" defaultChecked /> Retrait ou livraison</label>}
+        </div>
+      </fieldset>
+      {prescription && (
+        <label className="flex items-start gap-2 rounded-xl bg-warn-50 p-3 text-sm text-navy">
+          <input type="checkbox" name="pharmacist" className="mt-1" />
+          Je suis pharmacien et je valide la délivrance des produits sur ordonnance retenus. L'ordonnance originale sera vérifiée au retrait.
+        </label>
+      )}
+      <Alert>{state.error}</Alert>
+      <SubmitButton>Envoyer la réponse au client</SubmitButton>
     </form>
   );
 }

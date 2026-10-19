@@ -51,3 +51,6 @@ export const TTL = {
   tracking: 90 * 24 * 3600_000, // lien de suivi, prolongé à chaque nouvelle émission
   code: 10 * 60_000, // code à usage limité envoyé par SMS / e-mail
 };
+
+/** Créneaux proposés au client pour le retrait ou la livraison. */
+export const ORDER_SLOTS = ["Dès que possible", "Aujourd'hui, 12 h – 14 h", "Aujourd'hui, 14 h – 17 h", "Aujourd'hui, 17 h – 20 h", "Demain, 8 h – 12 h", "Demain, 14 h – 18 h"];

@@ -307,7 +307,8 @@ model Message {
 enum OrderStatus {
   PRESCRIPTION_REVIEW // produit sur ordonnance : attente de validation du pharmacien
   AWAITING_PAYMENT // paiement en ligne attendu
-  PLACED // enregistrée, en attente de confirmation par la pharmacie
+  PLACED // transmise : la pharmacie vérifie physiquement la disponibilité
+  AWAITING_CUSTOMER // vérifiée par la pharmacie : le client doit confirmer (retrait ou livraison)
   CONFIRMED
   PREPARING
   READY_FOR_PICKUP
@@ -324,9 +325,29 @@ enum Fulfillment {
   DELIVERY
 }
 
+/**
+ * Réponse de la pharmacie après vérification physique d'un produit commandé.
+ */
+enum ItemAnswer {
+  AVAILABLE
+  INSUFFICIENT // quantité insuffisante : confirmedQty indique ce qui est disponible
+  UNAVAILABLE
+  NEEDS_PHARMACIST // nécessite une validation du pharmacien au comptoir
+  OTHER // autre précision (answerNote)
+}
+
+/**
+ * Modes de remise autorisés par la pharmacie pour une commande vérifiée.
+ */
+enum FulfillmentMode {
+  PICKUP_ONLY
+  DELIVERY_ONLY
+  BOTH
+}
+
 model Order {
-  id                    String      @id @default(cuid()) // identifiant interne
-  publicRef             String      @unique // référence publique non prévisible
+  id                    String           @id @default(cuid()) // identifiant interne
+  publicRef             String           @unique // référence publique non prévisible
   status                OrderStatus
   pharmacyId            String
   customerId            String? // rattachement facultatif à un compte
@@ -340,25 +361,33 @@ model Order {
   deliveryNotes         String?
   courierName           String?
   courierId             String?
-  missionNo             Int         @unique @default(autoincrement()) // numéro de mission livreur, ex. PA-2048
-  requiresPrescription  Boolean     @default(false)
+  missionNo             Int              @unique @default(autoincrement()) // numéro de mission livreur, ex. PA-2048
+  requiresPrescription  Boolean          @default(false)
   prescriptionCheckedAt DateTime?
   subtotal              Int
-  deliveryFee           Int         @default(0)
+  deliveryFee           Int              @default(0)
   total                 Int
   currency              String
   /// Lien de suivi : seul le hachage SHA-256 du jeton est stocké.
-  trackingTokenHash     String      @unique
+  trackingTokenHash     String           @unique
   trackingExpiresAt     DateTime
   trackingRevokedAt     DateTime?
   /// Code de retrait : dérivé par HMAC(secret, id:nonce), jamais stocké en clair, à usage unique.
   handoverNonce         String
+  /// Jeton de suivi dérivé par HMAC(secret, nonce) : recalculable pour les notifications, jamais stocké.
+  trackingNonce         String?
+  /// Vérification physique par la pharmacie, puis autorisation explicite du client.
+  verifiedAt            DateTime?
+  verifiedById          String?
+  allowedModes          FulfillmentMode?
+  customerConfirmedAt   DateTime?
+  paymentPreference     String?
   handoverCodeUsedAt    DateTime?
-  handoverAttempts      Int         @default(0)
+  handoverAttempts      Int              @default(0)
   requestId             String? // demande de vérification à l'origine de la commande
   clientIpHash          String?
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
   pharmacy      Pharmacy           @relation(fields: [pharmacyId], references: [id])
   customer      Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
@@ -375,13 +404,16 @@ model Order {
 }
 
 model OrderItem {
-  id          String     @id @default(cuid())
-  orderId     String
-  productId   String
-  productName String
-  unitPrice   Int
-  quantity    Int
-  regulation  Regulation
+  id           String      @id @default(cuid())
+  orderId      String
+  productId    String
+  productName  String
+  unitPrice    Int
+  quantity     Int
+  regulation   Regulation
+  answer       ItemAnswer?
+  confirmedQty Int?
+  answerNote   String?
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }

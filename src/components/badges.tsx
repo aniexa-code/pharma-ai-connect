@@ -47,7 +47,7 @@ export function StockBadge({ status, confirmedAt, source }: { status?: string | 
 }
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  const tone: Tone = status === "CANCELLED" ? "red" : ["DELIVERED", "COLLECTED"].includes(status) ? "green" : ["PRESCRIPTION_REVIEW", "AWAITING_PAYMENT"].includes(status) ? "amber" : "blue";
+  const tone: Tone = status === "CANCELLED" ? "red" : ["DELIVERED", "COLLECTED"].includes(status) ? "green" : ["PRESCRIPTION_REVIEW", "AWAITING_PAYMENT", "AWAITING_CUSTOMER"].includes(status) ? "amber" : "blue";
   return <Badge tone={tone}>{STATUS_LABEL[status]}</Badge>;
 }
 

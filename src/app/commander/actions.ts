@@ -14,7 +14,7 @@ export async function placeOrder(_: FormState, fd: FormData): Promise<FormState>
       const [productId, quantity] = String(v).split(":");
       return { productId, quantity: Number(quantity) };
     });
-    const { order, token } = await createGuestOrder(
+    const { token } = await createGuestOrder(
       {
         pharmacyId: String(fd.get("pharmacyId") ?? ""),
         items,
@@ -31,7 +31,7 @@ export async function placeOrder(_: FormState, fd: FormData): Promise<FormState>
       // Un client connecté voit sa commande ajoutée à son historique ; un visiteur n'a rien à faire de plus.
       { ip: await clientIp(), customerId: customer?.id, honeypot: String(fd.get("website") ?? "") },
     );
-    target = order.status === "AWAITING_PAYMENT" ? `/suivi/${token}/paiement?nouvelle=1` : `/suivi/${token}?nouvelle=1`;
+    target = `/suivi/${token}?nouvelle=1`;
   } catch (e) {
     return { error: publicMessage(e) };
   }
