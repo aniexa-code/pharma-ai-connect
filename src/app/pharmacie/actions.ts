@@ -8,6 +8,7 @@ import { publicMessage } from "@/lib/errors";
 import { authenticatePharmacyUser } from "@/lib/services/accounts";
 import { addOrderMessage, completeHandover, pharmacyAdvance, regenerateHandoverCode, reviewPrescription } from "@/lib/services/orders";
 import { confirmHours, declareDuty, endDuty } from "@/lib/services/pharmacies";
+import { addStockItem, analyzeImport, cancelImport, publishImport, removeStockItem } from "@/lib/services/stock";
 import { pharmacyRespond } from "@/lib/services/requests";
 import { timezone } from "@/lib/config";
 import { zonedWallTimeToUtc } from "@/lib/hours";
@@ -83,6 +84,7 @@ export async function quickRespond(fd: FormData) {
     message: status === "CONFIRMED" ? "Disponible. Vous pouvez commander ou passer à la pharmacie." : "Désolé, ce produit n'est pas disponible pour le moment.",
   });
   revalidatePath("/pharmacie");
+  revalidatePath("/pharmacie/stock");
 }
 
 const STATUSES: StockStatus[] = ["AVAILABLE", "LOW", "OUT"];
@@ -112,6 +114,7 @@ export async function updateStock(fd: FormData) {
     });
   }
   revalidatePath("/pharmacie");
+  revalidatePath("/pharmacie/stock");
 }
 
 /** Horaires et garde : confirmation des horaires, déclaration ou fin de garde. */
@@ -131,4 +134,60 @@ export async function hoursAction(_: FormState, fd: FormData): Promise<FormState
   }
   revalidatePath("/pharmacie");
   return {};
+}
+
+export async function addStockAction(_: FormState, fd: FormData): Promise<FormState> {
+  const u = await requirePharmacyUser();
+  const qtyRaw = String(fd.get("quantity") ?? "").trim();
+  const status = String(fd.get("status")) as StockStatus;
+  try {
+    await addStockItem(u.pharmacyId, u.id, {
+      productId: String(fd.get("productId") ?? ""),
+      price: Math.round(Number(fd.get("price"))),
+      quantity: qtyRaw === "" ? null : Number(qtyRaw),
+      status: STATUSES.includes(status) ? status : "AVAILABLE",
+      packaging: String(fd.get("packaging") ?? "").trim().slice(0, 80) || null,
+    });
+  } catch (e) {
+    return { error: publicMessage(e) };
+  }
+  revalidatePath("/pharmacie/stock");
+  return { info: "Produit ajouté à votre stock." };
+}
+
+export async function removeStockAction(fd: FormData) {
+  const u = await requirePharmacyUser();
+  await removeStockItem(u.pharmacyId, u.id, String(fd.get("remove") ?? ""));
+  revalidatePath("/pharmacie/stock");
+}
+
+export async function importStockAction(_: FormState, fd: FormData): Promise<FormState> {
+  const u = await requirePharmacyUser();
+  const file = fd.get("file");
+  if (!(file instanceof File) || !file.size) return { error: "Choisissez un fichier .csv ou .xlsx." };
+  let id: string;
+  try {
+    id = (await analyzeImport(u.pharmacyId, u.id, file.name, Buffer.from(await file.arrayBuffer()))).id;
+  } catch (e) {
+    return { error: publicMessage(e) };
+  }
+  redirect(`/pharmacie/stock/import/${id}`);
+}
+
+export async function publishImportAction(_: FormState, fd: FormData): Promise<FormState> {
+  const u = await requirePharmacyUser();
+  let published: number;
+  try {
+    published = (await publishImport(u.pharmacyId, u.id, String(fd.get("importId")))).published;
+  } catch (e) {
+    return { error: publicMessage(e) };
+  }
+  revalidatePath("/pharmacie/stock");
+  redirect(`/pharmacie/stock?publie=${published}`);
+}
+
+export async function cancelImportAction(fd: FormData) {
+  const u = await requirePharmacyUser();
+  await cancelImport(u.pharmacyId, String(fd.get("importId")));
+  redirect("/pharmacie/stock");
 }

@@ -35,6 +35,9 @@ async function pharmacyLogin(page: Page, slug: string) {
 
 async function main() {
   await resetDatabase();
+  // Un ancien serveur resté sur le port servirait une version périmée : on s'arrête net.
+  const busy = await fetch(BASE).then(() => true, () => false);
+  if (busy) throw new Error(`Le port ${PORT} est déjà utilisé : arrêtez l'ancien serveur avant de lancer les tests.`);
   const server = spawn("npx", ["next", "start", "-p", String(PORT)], { env: { ...process.env, NODE_ENV: "production", DEMO_MODE: "true" }, stdio: "ignore" });
   try {
     for (let i = 0; i < 60; i++) {
@@ -259,6 +262,29 @@ async function main() {
       const kpis = await pharmacist.getByTestId("kpis").innerText();
       assert.match(kpis, /commandes/);
       await shot(pharmacist, "pharmacie");
+    });
+
+    await check("importer un fichier de stock : rapport, puis publication confirmée", async () => {
+      await pharmacist.goto(`${BASE}/pharmacie/stock`);
+      await pharmacist.getByTestId("stock-table").waitFor();
+      const file = "Produit;Dosage;Prix;Quantité\nParacétamol;500 mg;650;30\nProduit inconnu;;100;1\nIbuprofène;;abc;\n";
+      await pharmacist.setInputFiles("input[name=file]", { name: "stock.csv", mimeType: "text/csv", buffer: Buffer.from(file) });
+      await pharmacist.getByRole("button", { name: "Analyser le fichier" }).click();
+      await pharmacist.waitForURL(/\/pharmacie\/stock\/import\//);
+      const summary = await pharmacist.getByTestId("import-summary").innerText();
+      assert.match(summary, /1\s+Correcte/);
+      assert.match(summary, /1\s+Produit inconnu/);
+      assert.match(summary, /1\s+Erreur de format/);
+      await shot(pharmacist, "rapport-import");
+      await pharmacist.getByRole("button", { name: "Publier la ligne correcte" }).click();
+      await pharmacist.waitForURL(/publie=1/);
+      const row = pharmacist.getByTestId("stock-table").locator("tr", { hasText: "Paracétamol" });
+      assert.equal(await row.getByLabel("Prix de Paracétamol").inputValue(), "650");
+      const csv = await pharmacist.request.get(`${BASE}/pharmacie/stock/export?format=csv`);
+      assert.equal(csv.status(), 200);
+      assert.match(await csv.text(), /paracetamol-500;Paracétamol;500 mg;Comprimé;Boîte de 16 comprimés;650;30;Disponible/);
+      const xlsx = await pharmacist.request.get(`${BASE}/pharmacie/stock/export?format=xlsx`);
+      assert.match(xlsx.headers()["content-type"], /spreadsheetml/);
     });
 
     await check("créer un compte plus tard et rattacher la commande après vérification", async () => {

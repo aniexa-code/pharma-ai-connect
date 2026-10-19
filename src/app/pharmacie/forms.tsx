@@ -2,7 +2,7 @@
 import { useActionState, type ReactNode } from "react";
 import { SubmitButton } from "@/components/client";
 import { Alert, Field, Input, Select, Textarea } from "@/components/ui";
-import { hoursAction, orderAction, pharmacyLogin, respondToRequest } from "./actions";
+import { addStockAction, hoursAction, importStockAction, orderAction, pharmacyLogin, publishImportAction, respondToRequest } from "./actions";
 
 export function PharmacyLoginForm() {
   const [state, action] = useActionState(pharmacyLogin, {});
@@ -93,5 +93,61 @@ export function HoursDutyPanel({ hoursLabel, stale, dutyLabel, onDuty, defaultUn
       </div>
       <Alert>{state.error}</Alert>
     </div>
+  );
+}
+
+export function ImportStockForm() {
+  const [state, run] = useActionState(importStockAction, {});
+  return (
+    <form action={run} className="space-y-3" data-testid="import-form">
+      <Field label="Fichier CSV ou Excel (.xlsx), 2 Mo au maximum" hint="Colonnes : Produit (ou Code), Prix, et si possible Dosage, Forme, Conditionnement, Quantité, Statut.">
+        <Input name="file" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
+      </Field>
+      <Alert>{state.error}</Alert>
+      <SubmitButton variant="secondary">Analyser le fichier</SubmitButton>
+      <p className="text-xs text-muted">Rien n'est publié à cette étape : vous verrez d'abord le rapport de validation.</p>
+    </form>
+  );
+}
+
+export function AddStockForm({ products, currencyLabel }: { products: { id: string; label: string }[]; currencyLabel: string }) {
+  const [state, run] = useActionState(addStockAction, {});
+  return (
+    <form action={run} className="grid gap-3 sm:grid-cols-2" data-testid="add-stock">
+      <div className="sm:col-span-2">
+        <Field label="Produit du référentiel">
+          <Select name="productId" required defaultValue="">
+            <option value="" disabled>Choisir un produit…</option>
+            {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <Field label={`Prix (${currencyLabel})`}><Input name="price" type="number" min={1} required /></Field>
+      <Field label="Quantité (facultatif)"><Input name="quantity" type="number" min={0} /></Field>
+      <Field label="Disponibilité">
+        <Select name="status" defaultValue="AVAILABLE">
+          <option value="AVAILABLE">Disponible</option>
+          <option value="LOW">Stock faible</option>
+          <option value="OUT">Indisponible</option>
+        </Select>
+      </Field>
+      <Field label="Conditionnement (facultatif)"><Input name="packaging" maxLength={80} placeholder="Boîte de 16" /></Field>
+      <div className="space-y-2 sm:col-span-2">
+        <Alert>{state.error}</Alert>
+        <Alert tone="green">{state.info}</Alert>
+        <SubmitButton>Ajouter au stock</SubmitButton>
+      </div>
+    </form>
+  );
+}
+
+export function PublishImportForm({ importId, count }: { importId: string; count: number }) {
+  const [state, run] = useActionState(publishImportAction, {});
+  return (
+    <form action={run} className="space-y-2">
+      <input type="hidden" name="importId" value={importId} />
+      <Alert>{state.error}</Alert>
+      <SubmitButton>{count > 1 ? `Publier les ${count} lignes correctes` : "Publier la ligne correcte"}</SubmitButton>
+    </form>
   );
 }

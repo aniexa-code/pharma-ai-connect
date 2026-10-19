@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { OrderStatusBadge, StatusDot } from "@/components/badges";
+import { OrderStatusBadge } from "@/components/badges";
 import { Icon, type IconName } from "@/components/brand";
-import { AutoRefresh, SubmitButton } from "@/components/client";
-import { Card } from "@/components/ui";
+import { AutoRefresh } from "@/components/client";
+import { ButtonLink, Card } from "@/components/ui";
 import { requirePharmacyUser } from "@/lib/auth";
-import { availability, relativeTime } from "@/lib/availability";
-import { currency } from "@/lib/config";
+import { relativeTime } from "@/lib/availability";
 import { db } from "@/lib/db";
 import { isOnDuty, utcToZonedWallTime } from "@/lib/hours";
 import { getSettings } from "@/lib/settings";
 import { timezone } from "@/lib/config";
-import { pharmacyLogout, quickRespond, updateStock } from "./actions";
+import { pharmacyLogout, quickRespond } from "./actions";
 import { HoursDutyPanel } from "./forms";
 
 export const metadata: Metadata = { title: "Centre de contrôle pharmacie", robots: { index: false } };
@@ -44,6 +43,7 @@ export default async function PharmacyDashboard() {
   const onDutyNow = isOnDuty(u.pharmacy, now);
   const tomorrow8 = new Date(now.getTime() + 86_400_000);
   const defaultUntil = utcToZonedWallTime(onDutyNow ? u.pharmacy.onDutyUntil! : tomorrow8, tz).slice(0, 11) + "08:00";
+  const staleBefore = new Date(now.getTime() - 48 * 3_600_000);
   const waitingOrders = orders.filter((o) => ["PLACED", "PRESCRIPTION_REVIEW"].includes(o.status)).length;
   const productName = new Map(stocks.map((s) => [s.productId, `${s.product.name} ${s.product.strength ?? ""}`.trim()]));
   const kpis: { label: string; value: number; icon: IconName; accent?: boolean }[] = [
@@ -146,54 +146,15 @@ export default async function PharmacyDashboard() {
         </Card>
       </div>
 
-      <Card className="space-y-4">
-        <form action={updateStock}>
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="font-extrabold text-navy">Stock</h2>
-              <p className="text-sm text-muted">Chaque mise à jour est horodatée et visible immédiatement par les patients. Une quantité à 0 passe le produit en indisponible.</p>
-            </div>
-            <SubmitButton>Mettre à jour le stock</SubmitButton>
-          </div>
-          <div className="-mx-5 overflow-x-auto sm:mx-0">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-[0.12em] text-faint">
-                  <th className="px-5 py-2 sm:px-2">Médicament</th>
-                  <th className="px-2 py-2">Dosage</th>
-                  <th className="px-2 py-2">Disponibilité</th>
-                  <th className="px-2 py-2">Quantité</th>
-                  <th className="px-2 py-2">Prix ({["XAF", "XOF"].includes(currency(u.pharmacy.country)) ? "FCFA" : currency(u.pharmacy.country)})</th>
-                  <th className="px-2 py-2">Dernière mise à jour</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {stocks.map((s) => {
-                  const a = availability(s);
-                  return (
-                    <tr key={s.id}>
-                      <td className="px-5 py-2.5 font-bold text-navy sm:px-2">
-                        <input type="hidden" name="stockId" value={s.id} />
-                        <span className="inline-flex items-center gap-2"><StatusDot state={a.state} fresh={a.fresh} />{s.product.name}</span>
-                      </td>
-                      <td className="px-2 py-2.5 text-muted">{s.product.strength ?? "—"}</td>
-                      <td className="px-2 py-2.5">
-                        <select name={`status_${s.id}`} defaultValue={s.status === "UNKNOWN" ? "AVAILABLE" : s.status} className="min-h-9 rounded-lg border border-line-strong bg-white px-2 text-sm font-semibold text-navy">
-                          <option value="AVAILABLE">Disponible</option>
-                          <option value="LOW">Stock faible</option>
-                          <option value="OUT">Indisponible</option>
-                        </select>
-                      </td>
-                      <td className="px-2 py-2.5"><input name={`qty_${s.id}`} type="number" min={0} defaultValue={s.quantity ?? ""} placeholder="—" className="min-h-9 w-20 rounded-lg border border-line-strong px-2 text-sm" aria-label={`Quantité de ${s.product.name}`} /></td>
-                      <td className="px-2 py-2.5"><input name={`price_${s.id}`} type="number" min={0} defaultValue={s.price} className="min-h-9 w-24 rounded-lg border border-line-strong px-2 text-sm" aria-label={`Prix de ${s.product.name}`} /></td>
-                      <td className="px-2 py-2.5 text-xs text-muted">{s.confirmedAt ? relativeTime(s.confirmedAt) : "Jamais"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </form>
+      <Card className="flex flex-wrap items-center justify-between gap-4" data-testid="stock-summary">
+        <div>
+          <h2 className="font-extrabold text-navy">Stock numérique</h2>
+          <p className="text-sm text-muted">
+            {stocks.length} produits · {stocks.filter((s) => s.status === "OUT").length} indisponibles ·{" "}
+            {stocks.filter((s) => !s.confirmedAt || s.confirmedAt < staleBefore).length} à mettre à jour (plus de 48 h)
+          </p>
+        </div>
+        <ButtonLink href="/pharmacie/stock">Gérer le stock, importer, exporter</ButtonLink>
       </Card>
     </div>
   );

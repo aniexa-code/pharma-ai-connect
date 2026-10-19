@@ -40,21 +40,21 @@ const pharmacies = [
   { slug: "pharmacie-de-godomey", name: "Pharmacie de Godomey (démo)", district: "Godomey", city: "Abomey-Calavi", address: "Carrefour Godomey", lat: 6.4098, lng: 2.3402, hours: week("08:00", "19:00"), delivery: false, fee: 0, methods: ["CASH"], onDuty: false },
 ];
 
-const products: { slug: string; name: string; dci: string; form: string; strength?: string; category: string; regulation: Regulation; price: number }[] = [
-  { slug: "paracetamol-500", name: "Paracétamol", dci: "Paracétamol", form: "Comprimé", strength: "500 mg", category: "Douleur et fièvre", regulation: "OTC", price: 500 },
-  { slug: "ibuprofene-400", name: "Ibuprofène", dci: "Ibuprofène", form: "Comprimé", strength: "400 mg", category: "Douleur et fièvre", regulation: "OTC", price: 1200 },
-  { slug: "sro", name: "Sels de réhydratation orale", dci: "SRO", form: "Sachet", category: "Digestion", regulation: "OTC", price: 300 },
-  { slug: "vitamine-c-500", name: "Vitamine C", dci: "Acide ascorbique", form: "Comprimé à croquer", strength: "500 mg", category: "Vitamines", regulation: "OTC", price: 1500 },
-  { slug: "omeprazole-20", name: "Oméprazole", dci: "Oméprazole", form: "Gélule", strength: "20 mg", category: "Digestion", regulation: "OTC", price: 2500 },
-  { slug: "loratadine-10", name: "Loratadine", dci: "Loratadine", form: "Comprimé", strength: "10 mg", category: "Allergies", regulation: "OTC", price: 1800 },
-  { slug: "sirop-toux", name: "Sirop contre la toux", dci: "Carbocistéine", form: "Sirop", strength: "5 %", category: "Rhume et toux", regulation: "OTC", price: 2800 },
-  { slug: "tdr-paludisme", name: "Test de diagnostic rapide du paludisme", dci: "TDR", form: "Test", category: "Diagnostic", regulation: "OTC", price: 2000 },
-  { slug: "artemether-lumefantrine", name: "Artéméther-Luméfantrine", dci: "Artéméther + Luméfantrine", form: "Comprimé", strength: "20/120 mg", category: "Paludisme", regulation: "PRESCRIPTION", price: 3500 },
-  { slug: "amoxicilline-500", name: "Amoxicilline", dci: "Amoxicilline", form: "Gélule", strength: "500 mg", category: "Antibiotiques", regulation: "PRESCRIPTION", price: 2500 },
-  { slug: "metformine-500", name: "Metformine", dci: "Metformine", form: "Comprimé", strength: "500 mg", category: "Diabète", regulation: "PRESCRIPTION", price: 3000 },
-  { slug: "amlodipine-5", name: "Amlodipine", dci: "Amlodipine", form: "Comprimé", strength: "5 mg", category: "Tension", regulation: "PRESCRIPTION", price: 3200 },
-  { slug: "salbutamol-inhalateur", name: "Salbutamol", dci: "Salbutamol", form: "Inhalateur", strength: "100 µg", category: "Respiration", regulation: "PRESCRIPTION", price: 4500 },
-  { slug: "tramadol-50", name: "Tramadol", dci: "Tramadol", form: "Gélule", strength: "50 mg", category: "Douleur", regulation: "RESTRICTED", price: 4000 },
+const products: { slug: string; name: string; dci: string; form: string; strength?: string; packaging?: string; category: string; regulation: Regulation; price: number }[] = [
+  { slug: "paracetamol-500", name: "Paracétamol", dci: "Paracétamol", form: "Comprimé", strength: "500 mg", category: "Douleur et fièvre", regulation: "OTC", packaging: "Boîte de 16 comprimés", price: 500 },
+  { slug: "ibuprofene-400", name: "Ibuprofène", dci: "Ibuprofène", form: "Comprimé", strength: "400 mg", category: "Douleur et fièvre", regulation: "OTC", packaging: "Boîte de 20 comprimés", price: 1200 },
+  { slug: "sro", name: "Sels de réhydratation orale", dci: "SRO", form: "Sachet", category: "Digestion", regulation: "OTC", packaging: "Sachet de 20,5 g", price: 300 },
+  { slug: "vitamine-c-500", name: "Vitamine C", dci: "Acide ascorbique", form: "Comprimé à croquer", strength: "500 mg", category: "Vitamines", regulation: "OTC", packaging: "Tube de 10 comprimés", price: 1500 },
+  { slug: "omeprazole-20", name: "Oméprazole", dci: "Oméprazole", form: "Gélule", strength: "20 mg", category: "Digestion", regulation: "OTC", packaging: "Boîte de 14 gélules", price: 2500 },
+  { slug: "loratadine-10", name: "Loratadine", dci: "Loratadine", form: "Comprimé", strength: "10 mg", category: "Allergies", regulation: "OTC", packaging: "Boîte de 10 comprimés", price: 1800 },
+  { slug: "sirop-toux", name: "Sirop contre la toux", dci: "Carbocistéine", form: "Sirop", strength: "5 %", category: "Rhume et toux", regulation: "OTC", packaging: "Flacon de 125 ml", price: 2800 },
+  { slug: "tdr-paludisme", name: "Test de diagnostic rapide du paludisme", dci: "TDR", form: "Test", category: "Diagnostic", regulation: "OTC", packaging: "1 test", price: 2000 },
+  { slug: "artemether-lumefantrine", name: "Artéméther-Luméfantrine", dci: "Artéméther + Luméfantrine", form: "Comprimé", strength: "20/120 mg", category: "Paludisme", regulation: "PRESCRIPTION", packaging: "Boîte de 24 comprimés", price: 3500 },
+  { slug: "amoxicilline-500", name: "Amoxicilline", dci: "Amoxicilline", form: "Gélule", strength: "500 mg", category: "Antibiotiques", regulation: "PRESCRIPTION", packaging: "Boîte de 12 gélules", price: 2500 },
+  { slug: "metformine-500", name: "Metformine", dci: "Metformine", form: "Comprimé", strength: "500 mg", category: "Diabète", regulation: "PRESCRIPTION", packaging: "Boîte de 30 comprimés", price: 3000 },
+  { slug: "amlodipine-5", name: "Amlodipine", dci: "Amlodipine", form: "Comprimé", strength: "5 mg", category: "Tension", regulation: "PRESCRIPTION", packaging: "Boîte de 30 comprimés", price: 3200 },
+  { slug: "salbutamol-inhalateur", name: "Salbutamol", dci: "Salbutamol", form: "Inhalateur", strength: "100 µg", category: "Respiration", regulation: "PRESCRIPTION", packaging: "Flacon de 200 doses", price: 4500 },
+  { slug: "tramadol-50", name: "Tramadol", dci: "Tramadol", form: "Gélule", strength: "50 mg", category: "Douleur", regulation: "RESTRICTED", packaging: "Boîte de 30 gélules", price: 4000 },
 ];
 
 // Disponibilités variées pour montrer les niveaux de fiabilité : [statut, source, ancienneté en heures | null]
@@ -101,7 +101,7 @@ async function main() {
   const productRows = [];
   for (const p of products) {
     const { price: _price, ...data } = p;
-    productRows.push(await db.product.upsert({ where: { slug: p.slug }, update: {}, create: data }));
+    productRows.push(await db.product.upsert({ where: { slug: p.slug }, update: { packaging: data.packaging }, create: data }));
   }
   let i = 0;
   for (const ph of pharmacies) {

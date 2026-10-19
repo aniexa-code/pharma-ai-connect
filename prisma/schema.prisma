@@ -20,27 +20,27 @@ datasource db {
 /// Pays ouverts sur la plateforme : devise, fuseau horaire et règles locales.
 /// Toutes les règles financières et de recherche sont dans Setting, jamais dans le code.
 model Country {
-  code          String   @id // ISO 3166-1 alpha-2 : BJ, CG...
-  name          String
-  currency      String   // XOF, XAF...
-  timezone      String   // Africa/Porto-Novo...
-  dialCode      String   // +229
-  defaultCity   String
+  code           String   @id // ISO 3166-1 alpha-2 : BJ, CG...
+  name           String
+  currency       String // XOF, XAF...
+  timezone       String // Africa/Porto-Novo...
+  dialCode       String // +229
+  defaultCity    String
   /// Moyens de paiement des gains (livreurs, pharmacies) : MOBILE_MONEY, MOOV_MONEY...
-  payoutMethods String[]
+  payoutMethods  String[]
   /// Champs réglementaires demandés à l'inscription d'une pharmacie : [{ key, label, required, hint }]
-  pharmacyFields Json    @default("[]")
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
+  pharmacyFields Json     @default("[]")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
 }
 
 model Zone {
-  id       String @id @default(cuid())
-  name     String // quartier ou arrondissement
-  city     String
-  country  String @default("BJ")
-  lat      Float
-  lng      Float
+  id      String @id @default(cuid())
+  name    String // quartier ou arrondissement
+  city    String
+  country String @default("BJ")
+  lat     Float
+  lng     Float
 
   @@unique([name, city])
 }
@@ -57,10 +57,10 @@ model Setting {
 /// Journal d'audit : toute action sensible (réglage, validation, suspension, paiement...) y laisse une trace.
 model AuditLog {
   id        String   @id @default(cuid())
-  actorType String   // ADMIN, PHARMACY, COURIER, CUSTOMER, SYSTEM
+  actorType String // ADMIN, PHARMACY, COURIER, CUSTOMER, SYSTEM
   actorId   String?
-  action    String   // ex. SETTINGS_UPDATED, PHARMACY_VERIFIED
-  entity    String   // ex. Setting:BJ, Pharmacy:xxx
+  action    String // ex. SETTINGS_UPDATED, PHARMACY_VERIFIED
+  entity    String // ex. Setting:BJ, Pharmacy:xxx
   before    Json?
   after     Json?
   note      String?
@@ -80,58 +80,60 @@ model AdminUser {
 }
 
 model Pharmacy {
-  id              String   @id @default(cuid())
-  slug            String   @unique
-  name            String
-  address         String
-  district        String
-  city            String
-  country         String   @default("BJ")
-  lat             Float
-  lng             Float
-  phone           String
-  whatsapp        String?
-  email           String?
+  id               String    @id @default(cuid())
+  slug             String    @unique
+  name             String
+  address          String
+  district         String
+  city             String
+  country          String    @default("BJ")
+  lat              Float
+  lng              Float
+  phone            String
+  whatsapp         String?
+  email            String?
   /// Horaires hebdomadaires : { "1": [["08:00","20:00"]], ... } (0 = dimanche)
-  openingHours    Json
+  openingHours     Json
   /// Date à laquelle la pharmacie a confirmé ses horaires : trop ancienne, le statut « ouvert » n'est plus affiché.
   hoursConfirmedAt DateTime?
-  onDuty          Boolean  @default(false) // pharmacie de garde
+  onDuty           Boolean   @default(false) // pharmacie de garde
   /// Fin de la garde déclarée : sans date ou date passée, la pharmacie n'est pas présentée comme de garde.
-  onDutyUntil     DateTime?
-  offersPickup    Boolean  @default(true)
-  offersDelivery  Boolean  @default(false)
-  deliveryFee     Int      @default(0)
-  deliveryRadiusKm Float   @default(5)
+  onDutyUntil      DateTime?
+  offersPickup     Boolean   @default(true)
+  offersDelivery   Boolean   @default(false)
+  deliveryFee      Int       @default(0)
+  deliveryRadiusKm Float     @default(5)
   /// Moyens de paiement acceptés (codes PaymentMethod)
-  paymentMethods  String[] @default(["CASH"])
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  paymentMethods   String[]  @default(["CASH"])
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  stocks          Stock[]
-  staff           PharmacyUser[]
-  requests        PharmacyRequest[]
-  orders          Order[]
-  favoritedBy     FavoritePharmacy[]
+  stocks       Stock[]
+  staff        PharmacyUser[]
+  requests     PharmacyRequest[]
+  orders       Order[]
+  favoritedBy  FavoritePharmacy[]
+  stockImports StockImport[]
 }
 
 enum Regulation {
-  OTC          // vente libre : commande en ligne directe
+  OTC // vente libre : commande en ligne directe
   PRESCRIPTION // ordonnance : validation du pharmacien avant paiement, ordonnance vérifiée à la remise
-  RESTRICTED   // non commandable en ligne : vérification et échange uniquement
+  RESTRICTED // non commandable en ligne : vérification et échange uniquement
 }
 
 model Product {
-  id          String     @id @default(cuid())
-  slug        String     @unique
-  name        String
-  dci         String     // dénomination commune (molécule)
-  form        String     // comprimé, sirop...
-  strength    String?
-  category    String
-  regulation  Regulation @default(OTC)
-  createdAt   DateTime   @default(now())
+  id         String     @id @default(cuid())
+  slug       String     @unique
+  name       String
+  dci        String // dénomination commune (molécule)
+  form       String // comprimé, sirop...
+  strength   String?
+  category   String
+  regulation Regulation @default(OTC)
+  packaging  String? // conditionnement de référence (ex. « Boîte de 16 comprimés »)
+  createdAt  DateTime   @default(now())
 
   stocks      Stock[]
   favoritedBy FavoriteProduct[]
@@ -146,7 +148,7 @@ enum StockStatus {
 
 enum StockSource {
   PHARMACY // déclaré ou confirmé par la pharmacie
-  IMPORT   // import automatique d'un logiciel de gestion
+  IMPORT // import automatique d'un logiciel de gestion
   ESTIMATE // estimation de la plateforme
 }
 
@@ -154,15 +156,16 @@ model Stock {
   id          String      @id @default(cuid())
   pharmacyId  String
   productId   String
-  price       Int         // prix unitaire, en unités de la devise (pas de centimes)
-  quantity    Int?        // quantité en stock, si la pharmacie choisit de la renseigner
+  price       Int // prix unitaire, en unités de la devise (pas de centimes)
+  quantity    Int? // quantité en stock, si la pharmacie choisit de la renseigner
   status      StockStatus @default(UNKNOWN)
   source      StockSource @default(ESTIMATE)
+  packaging   String? // conditionnement propre à la pharmacie, s'il diffère de la référence
   confirmedAt DateTime?
   updatedAt   DateTime    @updatedAt
 
-  pharmacy    Pharmacy    @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  pharmacy Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([pharmacyId, productId])
   @@index([productId])
@@ -176,7 +179,7 @@ model PharmacyUser {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  pharmacy     Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  pharmacy Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
 }
 
 // Livreurs : voient les missions de livraison, l'adresse complète seulement après acceptation.
@@ -189,26 +192,26 @@ model Courier {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  orders       Order[]
+  orders Order[]
 }
 
 // ---------- Comptes clients (facultatifs) ----------
 
 model Customer {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String
-  phone         String?
-  passwordHash  String
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  phone          String?
+  passwordHash   String
   /// Canal préféré pour les notifications : SMS, WHATSAPP, EMAIL
-  notifyChannel String   @default("EMAIL")
-  marketingOptIn Boolean @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  notifyChannel  String   @default("EMAIL")
+  marketingOptIn Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  orders        Order[]
-  requests      PharmacyRequest[]
-  addresses     Address[]
+  orders             Order[]
+  requests           PharmacyRequest[]
+  addresses          Address[]
   favoritePharmacies FavoritePharmacy[]
   favoriteProducts   FavoriteProduct[]
 }
@@ -222,7 +225,7 @@ model Address {
   city       String
   createdAt  DateTime @default(now())
 
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 }
 
 model FavoritePharmacy {
@@ -249,14 +252,14 @@ model FavoriteProduct {
 
 enum RequestKind {
   VERIFICATION // « ce produit est-il disponible ? »
-  QUESTION     // simple échange avec la pharmacie
+  QUESTION // simple échange avec la pharmacie
 }
 
 enum RequestStatus {
   PENDING
-  CONFIRMED   // disponible
+  CONFIRMED // disponible
   UNAVAILABLE
-  ANSWERED    // question traitée
+  ANSWERED // question traitée
   CLOSED
 }
 
@@ -270,7 +273,7 @@ model PharmacyRequest {
   productId     String?
   quantity      Int           @default(1)
   contactName   String
-  notifyChannel String        // SMS, WHATSAPP, EMAIL ou LINK (lien seul)
+  notifyChannel String // SMS, WHATSAPP, EMAIL ou LINK (lien seul)
   phone         String?
   email         String?
   customerId    String?
@@ -279,8 +282,8 @@ model PharmacyRequest {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  pharmacy      Pharmacy      @relation(fields: [pharmacyId], references: [id])
-  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  pharmacy      Pharmacy       @relation(fields: [pharmacyId], references: [id])
+  customer      Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
   messages      Message[]
   notifications Notification[]
 
@@ -288,31 +291,31 @@ model PharmacyRequest {
 }
 
 model Message {
-  id        String           @id @default(cuid())
+  id        String   @id @default(cuid())
   requestId String?
   orderId   String?
-  author    String           // CUSTOMER ou PHARMACY
+  author    String // CUSTOMER ou PHARMACY
   body      String
-  createdAt DateTime         @default(now())
+  createdAt DateTime @default(now())
 
-  request   PharmacyRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  order     Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  request PharmacyRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  order   Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 // ---------- Commandes (invitées ou rattachées) ----------
 
 enum OrderStatus {
   PRESCRIPTION_REVIEW // produit sur ordonnance : attente de validation du pharmacien
-  AWAITING_PAYMENT    // paiement en ligne attendu
-  PLACED              // enregistrée, en attente de confirmation par la pharmacie
+  AWAITING_PAYMENT // paiement en ligne attendu
+  PLACED // enregistrée, en attente de confirmation par la pharmacie
   CONFIRMED
   PREPARING
   READY_FOR_PICKUP
   COURIER_ASSIGNED
-  PICKED_UP           // récupérée par le livreur
+  PICKED_UP // récupérée par le livreur
   OUT_FOR_DELIVERY
   DELIVERED
-  COLLECTED           // retirée en pharmacie
+  COLLECTED // retirée en pharmacie
   CANCELLED
 }
 
@@ -322,57 +325,57 @@ enum Fulfillment {
 }
 
 model Order {
-  id                 String      @id @default(cuid()) // identifiant interne
-  publicRef          String      @unique              // référence publique non prévisible
-  status             OrderStatus
-  pharmacyId         String
-  customerId         String?     // rattachement facultatif à un compte
-  fulfillment        Fulfillment
-  slot               String      // créneau de retrait ou de livraison
-  contactName        String
-  phone              String
-  email              String?
-  notifyChannel      String      // SMS, WHATSAPP, EMAIL ou LINK
-  deliveryAddress    String?
-  deliveryNotes      String?
-  courierName        String?
-  courierId          String?
-  missionNo          Int         @unique @default(autoincrement()) // numéro de mission livreur, ex. PA-2048
-  requiresPrescription Boolean   @default(false)
+  id                    String      @id @default(cuid()) // identifiant interne
+  publicRef             String      @unique // référence publique non prévisible
+  status                OrderStatus
+  pharmacyId            String
+  customerId            String? // rattachement facultatif à un compte
+  fulfillment           Fulfillment
+  slot                  String // créneau de retrait ou de livraison
+  contactName           String
+  phone                 String
+  email                 String?
+  notifyChannel         String // SMS, WHATSAPP, EMAIL ou LINK
+  deliveryAddress       String?
+  deliveryNotes         String?
+  courierName           String?
+  courierId             String?
+  missionNo             Int         @unique @default(autoincrement()) // numéro de mission livreur, ex. PA-2048
+  requiresPrescription  Boolean     @default(false)
   prescriptionCheckedAt DateTime?
-  subtotal           Int
-  deliveryFee        Int         @default(0)
-  total              Int
-  currency           String
+  subtotal              Int
+  deliveryFee           Int         @default(0)
+  total                 Int
+  currency              String
   /// Lien de suivi : seul le hachage SHA-256 du jeton est stocké.
-  trackingTokenHash  String      @unique
-  trackingExpiresAt  DateTime
-  trackingRevokedAt  DateTime?
+  trackingTokenHash     String      @unique
+  trackingExpiresAt     DateTime
+  trackingRevokedAt     DateTime?
   /// Code de retrait : dérivé par HMAC(secret, id:nonce), jamais stocké en clair, à usage unique.
-  handoverNonce      String
-  handoverCodeUsedAt DateTime?
-  handoverAttempts   Int         @default(0)
-  requestId          String?     // demande de vérification à l'origine de la commande
-  clientIpHash       String?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  handoverNonce         String
+  handoverCodeUsedAt    DateTime?
+  handoverAttempts      Int         @default(0)
+  requestId             String? // demande de vérification à l'origine de la commande
+  clientIpHash          String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
 
-  pharmacy           Pharmacy    @relation(fields: [pharmacyId], references: [id])
-  customer           Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  courier            Courier?    @relation(fields: [courierId], references: [id], onDelete: SetNull)
-  items              OrderItem[]
-  events             OrderEvent[]
-  payments           Payment[]
-  messages           Message[]
-  notifications      Notification[]
-  codes              VerificationCode[]
+  pharmacy      Pharmacy           @relation(fields: [pharmacyId], references: [id])
+  customer      Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  courier       Courier?           @relation(fields: [courierId], references: [id], onDelete: SetNull)
+  items         OrderItem[]
+  events        OrderEvent[]
+  payments      Payment[]
+  messages      Message[]
+  notifications Notification[]
+  codes         VerificationCode[]
 
   @@index([pharmacyId, status])
   @@index([customerId])
 }
 
 model OrderItem {
-  id          String  @id @default(cuid())
+  id          String     @id @default(cuid())
   orderId     String
   productId   String
   productName String
@@ -380,18 +383,18 @@ model OrderItem {
   quantity    Int
   regulation  Regulation
 
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model OrderEvent {
   id        String      @id @default(cuid())
   orderId   String
   status    OrderStatus
-  actor     String      // CUSTOMER, PHARMACY, SYSTEM, PAYMENT
+  actor     String // CUSTOMER, PHARMACY, SYSTEM, PAYMENT
   note      String?
   createdAt DateTime    @default(now())
 
-  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
 }
@@ -407,15 +410,15 @@ enum PaymentStatus {
 model Payment {
   id          String        @id @default(cuid())
   orderId     String
-  method      String        // CASH, MOBILE_MONEY, CARD
-  provider    String        // cash, sandbox, ...
+  method      String // CASH, MOBILE_MONEY, CARD
+  provider    String // cash, sandbox, ...
   providerRef String?
   amount      Int
   status      PaymentStatus @default(PENDING)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }
@@ -423,19 +426,19 @@ model Payment {
 // ---------- Notifications ----------
 
 model Notification {
-  id         String           @id @default(cuid())
-  orderId    String?
-  requestId  String?
-  channel    String           // SMS, WHATSAPP, EMAIL, LINK
-  recipient  String?          // coordonnée utilisée (absente pour LINK)
-  event      String           // ORDER_CONFIRMED, PAYMENT_CONFIRMED, READY_FOR_PICKUP...
-  body       String
-  status     String           // SENT, SIMULATED, FAILED, LINK_ONLY
-  error      String?
-  createdAt  DateTime         @default(now())
+  id        String   @id @default(cuid())
+  orderId   String?
+  requestId String?
+  channel   String // SMS, WHATSAPP, EMAIL, LINK
+  recipient String? // coordonnée utilisée (absente pour LINK)
+  event     String // ORDER_CONFIRMED, PAYMENT_CONFIRMED, READY_FOR_PICKUP...
+  body      String
+  status    String // SENT, SIMULATED, FAILED, LINK_ONLY
+  error     String?
+  createdAt DateTime @default(now())
 
-  order      Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  request    PharmacyRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  order   Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  request PharmacyRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
 }
 
 // ---------- Codes à usage limité (récupération du suivi, rattachement) ----------
@@ -443,14 +446,14 @@ model Notification {
 model VerificationCode {
   id        String    @id @default(cuid())
   orderId   String
-  purpose   String    // RECOVER_TRACKING, CLAIM_ORDER
+  purpose   String // RECOVER_TRACKING, CLAIM_ORDER
   codeHash  String
   attempts  Int       @default(0)
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
-  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, purpose])
 }
@@ -461,4 +464,29 @@ model RateLimitHit {
   createdAt DateTime @default(now())
 
   @@index([key, createdAt])
+}
+
+enum StockImportStatus {
+  PENDING // rapport de validation affiché, en attente de confirmation
+  PUBLISHED
+  CANCELLED
+}
+
+/**
+ * Import de stock (CSV / Excel) : rien n'est publié avant la confirmation de la pharmacie.
+ */
+model StockImport {
+  id          String            @id @default(cuid())
+  pharmacyId  String
+  userId      String
+  fileName    String
+  status      StockImportStatus @default(PENDING)
+  report      Json // lignes analysées et leur verdict
+  summary     Json // décompte par catégorie
+  createdAt   DateTime          @default(now())
+  publishedAt DateTime?
+
+  pharmacy Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId, createdAt])
 }
