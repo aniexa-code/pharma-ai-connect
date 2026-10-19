@@ -1,4 +1,5 @@
 "use server";
+import { submitReview } from "@/lib/services/reviews";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { clientIp, getCustomer, startCustomerSession } from "@/lib/auth";
@@ -93,6 +94,18 @@ export async function closeOrder(_: FormState, fd: FormData): Promise<FormState>
   }
   revalidatePath(`/suivi/${token}`);
   return { info: received ? "Merci, votre commande est clôturée de votre côté." : "Problème transmis à la pharmacie. Elle vous répondra ici." };
+}
+
+export async function reviewOrder(_: FormState, fd: FormData): Promise<FormState> {
+  const token = String(fd.get("token"));
+  const courier = fd.get("courierRating");
+  try {
+    await submitReview((await order(token)).id, { pharmacyRating: Number(fd.get("pharmacyRating")), courierRating: courier ? Number(courier) : null, comment: String(fd.get("comment") ?? "") });
+  } catch (e) {
+    return { error: publicMessage(e) };
+  }
+  revalidatePath(`/suivi/${token}`);
+  return { info: "Merci pour votre avis." };
 }
 
 // ---------- Paiement (prestataire simulé) ----------

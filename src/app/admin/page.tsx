@@ -24,6 +24,14 @@ const ACTION_LABEL: Record<string, string> = {
   VERIFICATION_REJECT: "Dossier refusé",
   VERIFICATION_SUSPEND: "Compte suspendu",
   VERIFICATION_REACTIVATE: "Compte réactivé",
+  PAYOUT_PAID: "Retrait livreur payé",
+  PAYOUT_REJECTED: "Retrait livreur refusé",
+  BILLING_PLAN_CHOSEN: "Formule d'abonnement choisie",
+  INVOICE_PAID: "Facture réglée",
+  BILLING_SUSPENDED: "Pharmacie suspendue pour impayé",
+  BILLING_STATUS: "Statut d'abonnement modifié",
+  BILLING_RUN: "Facturation quotidienne",
+  REVIEW_HIDDEN: "Avis masqué",
 };
 
 export default async function AdminHome() {

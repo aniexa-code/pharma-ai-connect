@@ -10,6 +10,7 @@ import { ServiceError } from "../errors";
 import { rateLimit } from "../rate-limit";
 import { firstIssue, phoneSchema } from "../validation";
 import { resolvePlace } from "./search";
+import { billingAllowsActive, ensureSubscription } from "./billing";
 
 export const DOC_MAX_BYTES = 2 * 1024 * 1024;
 export const DOCS_PER_OWNER = 12;
@@ -243,10 +244,11 @@ export async function decide(adminId: string, owner: DocumentOwner, ownerId: str
     const missing = missingDocs(owner, have, { vehicle: "vehicle" in current ? (current.vehicle ?? "") : "" });
     if (missing.length) throw new ServiceError("INVALID", `Validation impossible : pièce manquante (${missing[0]}).`);
   }
-  const live = rule.to === "APPROVED";
+  // Une pharmacie suspendue pour impayé reste hors ligne tant que sa facture n'est pas réglée.
+  const live = rule.to === "APPROVED" && (owner === "COURIER" || (await billingAllowsActive(ownerId)));
   const data = {
     verificationStatus: rule.to,
-    verificationNote: live ? null : note,
+    verificationNote: rule.to === "APPROVED" ? null : note,
     active: live,
     ...(decision === "APPROVE" ? { verifiedAt: new Date() } : {}),
   };
@@ -261,6 +263,8 @@ export async function decide(adminId: string, owner: DocumentOwner, ownerId: str
   await db.auditLog.create({
     data: { actorType: "ADMIN", actorId: adminId, action: `VERIFICATION_${decision}`, entity, before: { status: current.verificationStatus }, after: { status: rule.to, ...geo }, note },
   });
+  // La période d'essai démarre à la validation.
+  if (owner === "PHARMACY" && decision === "APPROVE") await ensureSubscription(ownerId);
   return rule.to;
 }
 

@@ -17,7 +17,8 @@ import { deliveryQuoteFor, serviceFeeFor } from "@/lib/services/fees";
 import { getSettings } from "@/lib/settings";
 import { maskPhone } from "@/lib/validation";
 import { attachToMyAccount, cancelOrder, newTrackingLink } from "../actions";
-import { AccountForm, CloseOrderForm, ConfirmOrderForm, OrderMessageForm } from "../forms";
+import { AccountForm, CloseOrderForm, ConfirmOrderForm, OrderMessageForm, ReviewForm } from "../forms";
+import { db } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Suivi de commande", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function TrackingPage({ params, searchParams }: { params: P
     const fee = q && !q.outOfRange ? q.fee : null;
     offer = { pickup: o.subtotal + service, delivery: fee === null ? null : o.subtotal + fee + service, fee, service, estimated: !!q && !q.outOfRange && q.estimated };
   }
+  const review = o.closedAt ? await db.review.findUnique({ where: { orderId: o.id } }) : null;
   const qty = (i: (typeof o.items)[number]) => (i.answer === "INSUFFICIENT" ? (i.confirmedQty ?? 0) : i.answer && i.answer !== "AVAILABLE" ? 0 : i.quantity);
 
   return (
@@ -120,6 +122,13 @@ export default async function TrackingPage({ params, searchParams }: { params: P
           </ul>
           {o.customerIssue && !o.customerClosedAt && <Alert tone="amber">Problème signalé : {o.customerIssue}. La pharmacie vous répond dans l'échange ci-dessous.</Alert>}
           {!o.customerClosedAt && <CloseOrderForm token={token} pickup={pickup} />}
+        </Card>
+      )}
+
+      {o.closedAt && (
+        <Card className="space-y-3">
+          <h2 className="font-bold text-navy">Votre avis</h2>
+          {review ? <p className="text-sm text-muted">Merci pour votre avis : {review.pharmacyRating} ★ pour la pharmacie{review.courierRating ? `, ${review.courierRating} ★ pour le livreur` : ""}.</p> : <ReviewForm token={token} courier={!!o.courierId} />}
         </Card>
       )}
 

@@ -12,6 +12,8 @@ export const ACCOUNT_LABEL: Record<string, string> = {
   COURIER_EARNING: "Gains des livreurs",
   COURIER_PAYOUT: "Retraits des livreurs",
   PHARMACY_SALES: "Ventes des pharmacies",
+  PLATFORM_SUBSCRIPTION: "Abonnements des pharmacies",
+  PLATFORM_PHARMACY_COMMISSION: "Commissions sur ventes",
 };
 
 /** Interdit toute modification ou suppression d'une écriture, au niveau de la base. Idempotent (lancé au déploiement). */
