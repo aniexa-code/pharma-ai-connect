@@ -5,7 +5,7 @@ import { clientIp, getCustomer, startCustomerSession } from "@/lib/auth";
 import { ServiceError, publicMessage } from "@/lib/errors";
 import { demoMode } from "@/lib/notify";
 import { claimWithTrackingToken, registerCustomer } from "@/lib/services/accounts";
-import { addOrderMessage, applyPaymentResult, customerCancel, retryPayment } from "@/lib/services/orders";
+import { addOrderMessage, applyPaymentResult, customerCancel, customerConfirm, retryPayment } from "@/lib/services/orders";
 import { orderByTrackingToken, recoverTracking, requestCode, rotateTrackingToken } from "@/lib/services/tracking";
 
 export type FormState = { error?: string; info?: string; step?: "code"; ref?: string; demoCode?: string };
@@ -61,6 +61,25 @@ export async function sendOrderMessage(_: FormState, fd: FormData): Promise<Form
   }
   revalidatePath(`/suivi/${token}`);
   return {};
+}
+
+/** « Je confirme ma commande » : accord explicite du client après la vérification par la pharmacie. */
+export async function confirmOrder(_: FormState, fd: FormData): Promise<FormState> {
+  const token = String(fd.get("token"));
+  let next: string;
+  try {
+    const o = await customerConfirm((await order(token)).id, {
+      fulfillment: fd.get("fulfillment") === "DELIVERY" ? "DELIVERY" : "PICKUP",
+      slot: String(fd.get("slot") ?? ""),
+      paymentMethod: String(fd.get("paymentMethod") ?? "CASH") as "CASH",
+      deliveryAddress: String(fd.get("deliveryAddress") ?? ""),
+      deliveryNotes: String(fd.get("deliveryNotes") ?? ""),
+    });
+    next = o.status === "AWAITING_PAYMENT" ? `/suivi/${token}/paiement` : `/suivi/${token}?confirmee=1`;
+  } catch (e) {
+    return { error: publicMessage(e) };
+  }
+  redirect(next);
 }
 
 // ---------- Paiement (prestataire simulé) ----------

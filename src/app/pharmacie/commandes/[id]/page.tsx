@@ -7,8 +7,8 @@ import { Alert, Badge, ButtonLink, Card, Input, Textarea } from "@/components/ui
 import { requirePharmacyUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/config";
 import { db } from "@/lib/db";
-import { METHOD_LABEL, PAYMENT_LABEL, STATUS_LABEL, allowedNext } from "@/lib/services/orders";
-import { OrderActionForm } from "../../forms";
+import { ANSWER_LABEL, METHOD_LABEL, MODE_LABEL, PAYMENT_LABEL, STATUS_LABEL, allowedNext, responsibleFor } from "@/lib/services/orders";
+import { OrderActionForm, VerifyOrderForm } from "../../forms";
 
 export const metadata: Metadata = { title: "Commande", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -18,12 +18,14 @@ export default async function PharmacyOrder({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const o = await db.order.findFirst({
     where: { id, pharmacyId: u.pharmacyId },
-    include: { items: true, events: { orderBy: { createdAt: "asc" } }, payments: { orderBy: { createdAt: "asc" } }, messages: { orderBy: { createdAt: "asc" } } },
+    include: { pharmacy: true, items: true, events: { orderBy: { createdAt: "asc" } }, payments: { orderBy: { createdAt: "asc" } }, messages: { orderBy: { createdAt: "asc" } } },
   });
   if (!o) notFound();
   const next = allowedNext(o).filter((s) => s !== "CANCELLED");
   const handover = (o.fulfillment === "PICKUP" && o.status === "READY_FOR_PICKUP") || (o.fulfillment === "DELIVERY" && o.status === "OUT_FOR_DELIVERY");
   const payment = o.payments.at(-1);
+  const responsible = responsibleFor(o);
+  const confirmedByCustomer = !!o.customerConfirmedAt;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -34,9 +36,22 @@ export default async function PharmacyOrder({ params }: { params: Promise<{ id: 
         {o.requiresPrescription && <Badge tone="amber">Ordonnance</Badge>}
       </div>
 
+      {responsible && (
+        <p className="rounded-xl bg-blue-50 px-4 py-2 text-sm text-navy" data-testid="responsible">
+          Étape en cours : <strong>{responsible.who}</strong> {responsible.what}.
+        </p>
+      )}
+      {o.verifiedAt && (
+        <p className="text-sm text-muted">
+          Vérifiée le {formatDate(o.verifiedAt)}{o.allowedModes ? ` · ${MODE_LABEL[o.allowedModes]}` : ""} · Autorisation client :{" "}
+          <strong className={confirmedByCustomer ? "text-turq-700" : "text-[#a8611d]"}>{confirmedByCustomer ? "CONFIRMÉE" : "EN ATTENTE"}</strong>
+          {o.customerConfirmedAt && ` le ${formatDate(o.customerConfirmedAt)}`}
+        </p>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="space-y-1 text-sm">
-          <p className="font-semibold">{o.fulfillment === "PICKUP" ? "Retrait" : "Livraison"} · {o.slot}</p>
+          <p className="font-semibold">{confirmedByCustomer ? (o.fulfillment === "PICKUP" ? "Retrait" : "Livraison") : `Souhait du client : ${o.fulfillment === "PICKUP" ? "retrait" : "livraison"}`} · {o.slot}</p>
           <p>Client : {o.contactName}</p>
           <p>Téléphone : <a href={`tel:${o.phone}`} className="text-brand-700">{o.phone}</a></p>
           {o.deliveryAddress && <p>Adresse : {o.deliveryAddress}{o.deliveryNotes ? ` (${o.deliveryNotes})` : ""}</p>}
@@ -45,7 +60,15 @@ export default async function PharmacyOrder({ params }: { params: Promise<{ id: 
         </Card>
         <Card className="text-sm">
           <ul className="space-y-1">
-            {o.items.map((i) => <li key={i.id} className="flex justify-between"><span>{i.productName} × {i.quantity}{i.regulation === "PRESCRIPTION" ? " (ordonnance)" : ""}</span><span>{formatMoney(i.unitPrice * i.quantity, o.currency)}</span></li>)}
+            {o.items.map((i) => (
+              <li key={i.id} className="flex justify-between gap-2">
+                <span>
+                  {i.productName} × {i.answer === "INSUFFICIENT" ? `${i.confirmedQty} (sur ${i.quantity})` : i.quantity}{i.regulation === "PRESCRIPTION" ? " (ordonnance)" : ""}
+                  {i.answer && <><br /><span className="text-xs text-muted">{ANSWER_LABEL[i.answer]}{i.answerNote ? ` · ${i.answerNote}` : ""}</span></>}
+                </span>
+                <span>{formatMoney(i.unitPrice * (i.answer === "INSUFFICIENT" ? i.confirmedQty ?? 0 : i.quantity), o.currency)}</span>
+              </li>
+            ))}
             <li className="flex justify-between border-t border-line pt-1 font-semibold"><span>Total</span><span>{formatMoney(o.total, o.currency)}</span></li>
           </ul>
         </Card>
@@ -53,6 +76,16 @@ export default async function PharmacyOrder({ params }: { params: Promise<{ id: 
 
       <Card className="space-y-4">
         <h2 className="font-semibold">Actions</h2>
+        {o.status === "PLACED" && (
+          <VerifyOrderForm
+            orderId={o.id}
+            pickup={o.pharmacy.offersPickup}
+            delivery={o.pharmacy.offersDelivery}
+            currencyLabel={["XAF", "XOF"].includes(o.currency) ? "FCFA" : o.currency}
+            items={o.items.map((i) => ({ id: i.id, name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, prescription: i.regulation === "PRESCRIPTION" }))}
+          />
+        )}
+        {o.status === "AWAITING_CUSTOMER" && <Alert tone="blue">Réponse envoyée : en attente de la confirmation du client.</Alert>}
         {o.status === "PRESCRIPTION_REVIEW" && (
           <div className="space-y-2">
             <Alert tone="amber">Validez la demande au regard du produit et du client. L'ordonnance originale sera vérifiée à la remise.</Alert>

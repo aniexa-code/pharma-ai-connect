@@ -2,7 +2,7 @@
 // il faut le jeton secret du lien de suivi, ou un code à usage limité envoyé au contact de la commande.
 import { db } from "../db";
 import { TTL } from "../config";
-import { handoverCode, hashCode, hashToken, looksLikeToken, numericCode, randomToken, safeEqual } from "../crypto";
+import { handoverCode, hashCode, hashToken, looksLikeToken, newNonce, numericCode, safeEqual, trackingToken } from "../crypto";
 import { ServiceError } from "../errors";
 import { notify } from "../notify";
 import { rateLimit } from "../rate-limit";
@@ -35,10 +35,11 @@ export function visibleHandoverCode(o: Pick<TrackedOrder, "id" | "handoverNonce"
 
 /** Remplace le lien de suivi : l'ancien cesse immédiatement de fonctionner. */
 export async function rotateTrackingToken(orderId: string) {
-  const token = randomToken();
+  const nonce = newNonce();
+  const token = trackingToken(nonce);
   await db.order.update({
     where: { id: orderId },
-    data: { trackingTokenHash: hashToken(token), trackingExpiresAt: new Date(Date.now() + TTL.tracking), trackingRevokedAt: null },
+    data: { trackingNonce: nonce, trackingTokenHash: hashToken(token), trackingExpiresAt: new Date(Date.now() + TTL.tracking), trackingRevokedAt: null },
   });
   return token;
 }

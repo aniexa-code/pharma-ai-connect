@@ -1,12 +1,12 @@
 "use server";
-import type { OrderStatus, StockStatus } from "@prisma/client";
+import type { FulfillmentMode, ItemAnswer, OrderStatus, StockStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { clientIp, endSession, requirePharmacyUser, startPharmacySession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { publicMessage } from "@/lib/errors";
 import { authenticatePharmacyUser } from "@/lib/services/accounts";
-import { addOrderMessage, completeHandover, pharmacyAdvance, regenerateHandoverCode, reviewPrescription } from "@/lib/services/orders";
+import { addOrderMessage, completeHandover, pharmacyAdvance, regenerateHandoverCode, reviewPrescription, verifyOrder, type ItemCheck } from "@/lib/services/orders";
 import { confirmHours, declareDuty, endDuty } from "@/lib/services/pharmacies";
 import { addStockItem, analyzeImport, cancelImport, publishImport, removeStockItem } from "@/lib/services/stock";
 import { pharmacyRespond } from "@/lib/services/requests";
@@ -190,4 +190,31 @@ export async function cancelImportAction(fd: FormData) {
   const u = await requirePharmacyUser();
   await cancelImport(u.pharmacyId, String(fd.get("importId")));
   redirect("/pharmacie/stock");
+}
+
+const ANSWERS: ItemAnswer[] = ["AVAILABLE", "INSUFFICIENT", "UNAVAILABLE", "NEEDS_PHARMACIST", "OTHER"];
+const MODES: FulfillmentMode[] = ["PICKUP_ONLY", "DELIVERY_ONLY", "BOTH"];
+
+/** Réponse de la pharmacie après vérification en rayon de chaque produit commandé. */
+export async function verifyOrderAction(_: FormState, fd: FormData): Promise<FormState> {
+  const u = await requirePharmacyUser();
+  const orderId = String(fd.get("orderId"));
+  const items: Record<string, ItemCheck> = {};
+  for (const id of fd.getAll("itemId").map(String)) {
+    const answer = String(fd.get(`answer_${id}`)) as ItemAnswer;
+    if (!ANSWERS.includes(answer)) return { error: "Indiquez une réponse pour chaque produit." };
+    const qty = String(fd.get(`qty_${id}`) ?? "").trim();
+    const price = String(fd.get(`price_${id}`) ?? "").trim();
+    items[id] = { answer, quantity: qty ? Number(qty) : null, price: price ? Number(price) : null, note: String(fd.get(`note_${id}`) ?? "") };
+  }
+  const modes = String(fd.get("modes")) as FulfillmentMode;
+  if (!MODES.includes(modes)) return { error: "Indiquez si la commande peut être retirée, livrée, ou les deux." };
+  try {
+    await verifyOrder(u.pharmacyId, u.id, orderId, { items, modes, pharmacistApproval: fd.get("pharmacist") === "on" });
+  } catch (e) {
+    return { error: publicMessage(e) };
+  }
+  revalidatePath(`/pharmacie/commandes/${orderId}`);
+  revalidatePath("/pharmacie");
+  return { info: "Réponse envoyée au client." };
 }

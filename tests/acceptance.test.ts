@@ -2,13 +2,19 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { db } from "../src/lib/db";
-import { applyPaymentResult, completeHandover, createGuestOrder, pharmacyAdvance, retryPayment, reviewPrescription } from "../src/lib/services/orders";
+import { applyPaymentResult, completeHandover, createGuestOrder, customerConfirm, pharmacyAdvance, retryPayment, verifyOrder } from "../src/lib/services/orders";
 import { createRequest, pharmacyRespond, requestByToken } from "../src/lib/services/requests";
 import { resolvePlace, searchPharmacies, searchProducts } from "../src/lib/services/search";
 import { orderByTrackingToken, visibleHandoverCode } from "../src/lib/services/tracking";
 import { fixture, guest, resetDatabase } from "./helpers";
 
 let f: Awaited<ReturnType<typeof fixture>>;
+
+/** La pharmacie vérifie en rayon : tout est disponible. */
+async function verifyAll(pharmacyId: string, orderId: string, modes: "PICKUP_ONLY" | "DELIVERY_ONLY" | "BOTH" = "BOTH", pharmacistApproval = false) {
+  const items = await db.orderItem.findMany({ where: { orderId } });
+  return verifyOrder(pharmacyId, "pharmacien", orderId, { items: Object.fromEntries(items.map((i) => [i.id, { answer: "AVAILABLE" as const }])), modes, pharmacistApproval });
+}
 before(async () => {
   await resetDatabase();
   f = await fixture();
@@ -112,7 +118,10 @@ describe("Commande invitée, paiement, suivi et notifications", () => {
     assert.equal(tracked?.id, order.id);
     assert.equal(visibleHandoverCode(tracked!), handoverCode);
 
-    await pharmacyAdvance(f.ganhi.id, order.id, "CONFIRMED");
+    await assert.rejects(pharmacyAdvance(f.ganhi.id, order.id, "CONFIRMED"), /Impossible/, "pas de confirmation sans vérification physique");
+    assert.equal((await verifyAll(f.ganhi.id, order.id)).status, "AWAITING_CUSTOMER");
+    assert.equal((await orderByTrackingToken(token))?.payments.length, 0, "rien n'est payé avant l'accord du client");
+    await customerConfirm(order.id, { fulfillment: "PICKUP", slot: "Dès que possible", paymentMethod: "CASH" });
     await pharmacyAdvance(f.ganhi.id, order.id, "READY_FOR_PICKUP");
     await assert.rejects(completeHandover(f.ganhi.id, order.id, "000000".replace(/0/g, () => "9")), /Code incorrect/);
     await completeHandover(f.ganhi.id, order.id, handoverCode);
@@ -123,11 +132,12 @@ describe("Commande invitée, paiement, suivi et notifications", () => {
     assert.equal(done?.payments[0].status, "CONFIRMED");
     assert.deepEqual(
       done?.events.map((e) => e.status),
-      ["PLACED", "CONFIRMED", "READY_FOR_PICKUP", "COLLECTED"],
+      ["PLACED", "AWAITING_CUSTOMER", "CONFIRMED", "READY_FOR_PICKUP", "COLLECTED"],
       "l'historique des statuts est conservé",
     );
     const events = done!.notifications.map((n) => n.event);
-    for (const e of ["ORDER_RECEIVED", "CONFIRMED", "READY_FOR_PICKUP", "COLLECTED"]) assert.ok(events.includes(e), `notification ${e}`);
+    assert.ok(done!.events.some((e) => e.actor === "CUSTOMER" && e.note === "Autorisation client : CONFIRMÉE."), "l'accord du client est tracé");
+    for (const e of ["ORDER_RECEIVED", "ORDER_VERIFIED", "ORDER_CONFIRMED_BY_CUSTOMER", "READY_FOR_PICKUP", "COLLECTED"]) assert.ok(events.includes(e), `notification ${e}`);
     assert.equal(visibleHandoverCode(done!), null, "le code de retrait ne sert qu'une fois");
   });
 
@@ -141,18 +151,24 @@ describe("Commande invitée, paiement, suivi et notifications", () => {
       deliveryAddress: "Rue 12.054, maison bleue, Agla",
       paymentMethod: "MOBILE_MONEY",
     });
-    assert.equal(order.status, "AWAITING_PAYMENT");
-    assert.equal(order.total, order.subtotal + f.ganhi.deliveryFee);
+    assert.equal(order.status, "PLACED");
+    await verifyAll(f.ganhi.id, order.id);
+    await assert.rejects(
+      customerConfirm(order.id, { fulfillment: "DELIVERY", slot: "Dès que possible", paymentMethod: "CASH", deliveryAddress: "Rue 12.054, maison bleue, Agla" }),
+      /se règle en ligne/,
+    );
+    const confirmed = await customerConfirm(order.id, { fulfillment: "DELIVERY", slot: "Dès que possible", paymentMethod: "MOBILE_MONEY", deliveryAddress: "Rue 12.054, maison bleue, Agla" });
+    assert.equal(confirmed.status, "AWAITING_PAYMENT");
+    assert.equal(confirmed.total, confirmed.subtotal + f.ganhi.deliveryFee);
 
     let o = await orderByTrackingToken(token);
     await applyPaymentResult(o!.payments[0].id, "FAILED");
     const retry = await retryPayment(order.id, "MOBILE_MONEY");
     await applyPaymentResult(retry.id, "CONFIRMED");
     o = await orderByTrackingToken(token);
-    assert.equal(o?.status, "PLACED");
+    assert.equal(o?.status, "CONFIRMED");
     assert.deepEqual(o?.payments.map((p) => p.status), ["FAILED", "CONFIRMED"]);
 
-    await pharmacyAdvance(f.ganhi.id, order.id, "CONFIRMED");
     await assert.rejects(pharmacyAdvance(f.ganhi.id, order.id, "READY_FOR_PICKUP"), /Impossible/);
     await pharmacyAdvance(f.ganhi.id, order.id, "COURIER_ASSIGNED", { courierName: "Jonas" });
     await pharmacyAdvance(f.ganhi.id, order.id, "PICKED_UP");
@@ -174,6 +190,8 @@ describe("Commande invitée, paiement, suivi et notifications", () => {
       fulfillment: "PICKUP",
       paymentMethod: "CARD",
     });
+    await verifyAll(f.ganhi.id, order.id);
+    await customerConfirm(order.id, { fulfillment: "PICKUP", slot: "Dès que possible", paymentMethod: "CARD" });
     let o = await orderByTrackingToken(token);
     await applyPaymentResult(o!.payments[0].id, "CONFIRMED");
     await pharmacyAdvance(f.ganhi.id, order.id, "CANCELLED", { note: "Rupture imprévue" });
@@ -213,11 +231,16 @@ describe("Produits réglementés (§ 8)", () => {
       fulfillment: "PICKUP",
       paymentMethod: "MOBILE_MONEY",
     });
-    assert.equal(order.status, "PRESCRIPTION_REVIEW");
+    assert.equal(order.status, "PLACED");
+    assert.equal(await db.payment.count({ where: { orderId: order.id } }), 0, "pas de paiement avant validation");
+    await assert.rejects(verifyAll(f.ganhi.id, order.id), /pharmacien/, "un produit sur ordonnance exige la validation du pharmacien");
+    const reviewed = await verifyAll(f.ganhi.id, order.id, "BOTH", true);
+    assert.equal(reviewed.allowedModes, "PICKUP_ONLY", "ordonnance : retrait uniquement");
+    assert.ok(reviewed.prescriptionCheckedAt);
+    await assert.rejects(customerConfirm(order.id, { fulfillment: "DELIVERY", slot: "Dès que possible", paymentMethod: "MOBILE_MONEY", deliveryAddress: "Rue 214, Akpakpa" }), /retrait/);
+    const confirmed = await customerConfirm(order.id, { fulfillment: "PICKUP", slot: "Dès que possible", paymentMethod: "MOBILE_MONEY" });
+    assert.equal(confirmed.status, "AWAITING_PAYMENT");
     const payment = await db.payment.findFirstOrThrow({ where: { orderId: order.id } });
-    await assert.rejects(applyPaymentResult(payment.id, "CONFIRMED"), /n'attend pas de paiement/, "pas de paiement avant validation");
-    const reviewed = await reviewPrescription(f.ganhi.id, order.id, true);
-    assert.equal(reviewed.status, "AWAITING_PAYMENT");
     await applyPaymentResult(payment.id, "CONFIRMED");
     await pharmacyAdvance(f.ganhi.id, order.id, "READY_FOR_PICKUP");
     await completeHandover(f.ganhi.id, order.id, handoverCode);

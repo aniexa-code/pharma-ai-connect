@@ -18,6 +18,14 @@ export function randomToken() {
   return randomBytes(32).toString("base64url");
 }
 
+/**
+ * Jeton de suivi d'une commande, dérivé du secret serveur et d'un nonce : la base ne garde que le nonce et
+ * l'empreinte du jeton, mais le serveur peut le recalculer pour l'envoyer dans une notification.
+ */
+export function trackingToken(nonce: string) {
+  return hmac(`track:${nonce}`).toString("base64url");
+}
+
 export function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }

@@ -4,7 +4,7 @@ import { Icon } from "@/components/brand";
 import { Stepper } from "@/components/progress";
 import { Alert, ButtonLink, Card, Eyebrow, PageTitle } from "@/components/ui";
 import { getCustomer } from "@/lib/auth";
-import { formatMoney } from "@/lib/config";
+import { ORDER_SLOTS, formatMoney } from "@/lib/config";
 import { db } from "@/lib/db";
 import { METHOD_LABEL, availableMethods } from "@/lib/services/orders";
 import { OrderForm } from "./OrderForm";
@@ -12,7 +12,6 @@ import { OrderForm } from "./OrderForm";
 export const metadata: Metadata = { title: "Commander" };
 export const dynamic = "force-dynamic";
 
-const SLOTS = ["Dès que possible", "Aujourd'hui, 12 h – 14 h", "Aujourd'hui, 14 h – 17 h", "Aujourd'hui, 17 h – 20 h", "Demain, 8 h – 12 h", "Demain, 14 h – 18 h"];
 
 export default async function OrderPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
@@ -48,7 +47,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div className="rounded-2xl border border-line bg-white px-4 py-3">
-        <Stepper steps={["Médicament", "Pharmacie", "Retrait ou livraison", "Confirmation"]} current={2} />
+        <Stepper steps={["Médicament", "Votre demande", "Vérification en pharmacie", "Votre confirmation"]} current={1} />
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_1.35fr]">
         <div className="space-y-4">
@@ -90,7 +89,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
             delivery={pharmacy.offersDelivery}
             prescription={prescription}
             methods={availableMethods(pharmacy.paymentMethods).map((m) => ({ value: m, label: METHOD_LABEL[m] }))}
-            slots={SLOTS}
+            slots={ORDER_SLOTS}
             subtotal={formatMoney(subtotal)}
             deliveryFee={pharmacy.deliveryFee}
             formatTotal={{ pickup: formatMoney(subtotal), delivery: formatMoney(subtotal + pharmacy.deliveryFee), fee: formatMoney(pharmacy.deliveryFee) }}

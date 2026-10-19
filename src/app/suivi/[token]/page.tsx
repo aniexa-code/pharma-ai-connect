@@ -9,18 +9,18 @@ import { ContactLinks } from "@/components/ContactLinks";
 import { NotificationList, Thread } from "@/components/Thread";
 import { Alert, Badge, ButtonLink, Card, Eyebrow } from "@/components/ui";
 import { getCustomer } from "@/lib/auth";
-import { formatMoney } from "@/lib/config";
+import { ORDER_SLOTS, formatMoney } from "@/lib/config";
 import { CHANNEL_LABEL } from "@/lib/notify";
-import { METHOD_LABEL, PAYMENT_LABEL, STATUS_LABEL, isFinal, trackingUrl } from "@/lib/services/orders";
+import { ANSWER_LABEL, METHOD_LABEL, PAYMENT_LABEL, availableMethods, customerModes, isFinal, responsibleFor, trackingUrl } from "@/lib/services/orders";
 import { orderByTrackingToken, visibleHandoverCode } from "@/lib/services/tracking";
 import { maskPhone } from "@/lib/validation";
 import { attachToMyAccount, cancelOrder, newTrackingLink } from "../actions";
-import { AccountForm, OrderMessageForm } from "../forms";
+import { AccountForm, ConfirmOrderForm, OrderMessageForm } from "../forms";
 
 export const metadata: Metadata = { title: "Suivi de commande", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-const CANCELLABLE = ["PRESCRIPTION_REVIEW", "AWAITING_PAYMENT", "PLACED", "CONFIRMED"];
+const CANCELLABLE = ["PRESCRIPTION_REVIEW", "AWAITING_PAYMENT", "PLACED", "AWAITING_CUSTOMER", "CONFIRMED"];
 
 export default async function TrackingPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { token } = await params;
@@ -31,10 +31,16 @@ export default async function TrackingPage({ params, searchParams }: { params: P
   const code = visibleHandoverCode(o);
   const payment = o.payments.at(-1);
   const pickup = o.fulfillment === "PICKUP";
+  const responsible = responsibleFor(o);
+  const awaitingMe = o.status === "AWAITING_CUSTOMER";
+  // Le code de remise n'a de sens qu'une fois la commande confirmée par le client.
+  const showCode = code && !!o.customerConfirmedAt;
+  const qty = (i: (typeof o.items)[number]) => (i.answer === "INSUFFICIENT" ? (i.confirmedQty ?? 0) : i.answer && i.answer !== "AVAILABLE" ? 0 : i.quantity);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      {sp.nouvelle && <Alert tone="green">Commande enregistrée. Conservez ce lien : il vous permet de suivre votre commande sans compte.</Alert>}
+      {sp.nouvelle && <Alert tone="green">Demande transmise à la pharmacie, qui vérifie maintenant chaque produit en rayon. Conservez ce lien : il vous permet de suivre votre commande sans compte.</Alert>}
+      {sp.confirmee && <Alert tone="green">Commande confirmée. Votre code de {pickup ? "retrait" : "remise"} est affiché ci-dessous.</Alert>}
       {sp.paye && <Alert tone="green">Paiement confirmé.</Alert>}
       {sp.lien && <Alert tone="blue">Nouveau lien de suivi créé : l'ancien ne fonctionne plus. Enregistrez celui-ci.</Alert>}
 
@@ -43,7 +49,7 @@ export default async function TrackingPage({ params, searchParams }: { params: P
           <div className="space-y-1">
             <Eyebrow>Suivi de commande</Eyebrow>
             <p className="font-mono text-2xl font-bold tracking-wide text-navy" data-testid="order-ref">{o.publicRef}</p>
-            <p className="text-sm text-muted">{pickup ? "Retrait en pharmacie" : "Livraison"} · {o.slot}</p>
+            {o.customerConfirmedAt && <p className="text-sm text-muted">{pickup ? "Retrait en pharmacie" : "Livraison"} · {o.slot}</p>}
           </div>
           <div className="flex flex-col items-end gap-2">
             <span data-testid="order-status"><OrderStatusBadge status={o.status} /></span>
@@ -57,10 +63,10 @@ export default async function TrackingPage({ params, searchParams }: { params: P
             fulfillment={o.fulfillment}
             events={o.events}
             createdAt={o.createdAt}
-            detail={o.status === "PRESCRIPTION_REVIEW" ? "Un pharmacien vérifie votre demande." : o.status === "AWAITING_PAYMENT" ? "En attente de votre paiement." : o.courierName && !isFinal(o.status) ? `Livreur : ${o.courierName}` : null}
+            detail={o.status === "PLACED" ? "La pharmacie vérifie chaque produit en rayon." : o.status === "AWAITING_CUSTOMER" ? "À vous : confirmez votre commande." : o.status === "PRESCRIPTION_REVIEW" ? "Un pharmacien vérifie votre demande." : o.status === "AWAITING_PAYMENT" ? "En attente de votre paiement." : o.courierName && !isFinal(o.status) ? `Livreur : ${o.courierName}` : null}
           />
           <div className="space-y-4">
-            {code && !isFinal(o.status) && (
+            {showCode && !isFinal(o.status) && (
               <div className="relative overflow-hidden rounded-2xl bg-navy p-5 text-center text-white">
                 <div className="tech-grid absolute inset-0 opacity-30 invert" />
                 <p className="relative text-xs font-semibold text-white/70">Code de {pickup ? "retrait" : "remise"}, à donner uniquement {pickup ? "au comptoir" : "au livreur, à la réception"}</p>
@@ -82,7 +88,47 @@ export default async function TrackingPage({ params, searchParams }: { params: P
             </div>
           </div>
         </div>
+        {responsible && (
+          <p className="rounded-xl bg-blue-50 px-4 py-2 text-sm text-navy" data-testid="responsible">
+            Étape en cours : <strong>{responsible.you ? "Vous" : responsible.who}</strong> {responsible.you ?? responsible.what}.
+          </p>
+        )}
+        {o.customerConfirmedAt && <p className="text-xs text-muted" data-testid="customer-authorization">Autorisation client : <strong className="text-turq-700">CONFIRMÉE</strong> le {formatDate(o.customerConfirmedAt)}</p>}
       </Card>
+
+      {awaitingMe && (
+        <Card className="space-y-4 ring-2 ring-blue/30" data-testid="awaiting-customer">
+          <div>
+            <h2 className="text-lg font-extrabold text-navy">La pharmacie a vérifié votre commande</h2>
+            <p className="text-sm text-muted">Voici ce qui est réellement disponible et au prix confirmé. Rien n'est réservé ni payé tant que vous n'avez pas confirmé.</p>
+          </div>
+          <ul className="divide-y divide-line text-sm">
+            {o.items.map((i) => (
+              <li key={i.id} className="flex justify-between gap-3 py-2">
+                <span className={qty(i) ? "" : "text-muted line-through"}>
+                  {i.productName} × {qty(i) || i.quantity}
+                  <br />
+                  <span className={`text-xs font-semibold no-underline ${i.answer === "AVAILABLE" ? "text-turq-700" : "text-[#a8611d]"}`}>
+                    {i.answer ? ANSWER_LABEL[i.answer] : ""}{i.answer === "INSUFFICIENT" ? ` : ${i.confirmedQty} sur ${i.quantity}` : ""}{i.answerNote ? ` · ${i.answerNote}` : ""}
+                  </span>
+                </span>
+                <span className="whitespace-nowrap font-semibold">{qty(i) ? formatMoney(i.unitPrice * qty(i), o.currency) : "—"}</span>
+              </li>
+            ))}
+          </ul>
+          <ConfirmOrderForm
+            token={token}
+            modes={customerModes(o)}
+            preferred={o.fulfillment}
+            slots={ORDER_SLOTS}
+            slot={o.slot}
+            address={o.deliveryAddress ?? ""}
+            methods={availableMethods(o.pharmacy.paymentMethods).map((m) => ({ value: m, label: METHOD_LABEL[m] }))}
+            preferredMethod={o.paymentPreference ?? "CASH"}
+            totals={{ pickup: formatMoney(o.subtotal, o.currency), delivery: formatMoney(o.subtotal + o.pharmacy.deliveryFee, o.currency), fee: formatMoney(o.pharmacy.deliveryFee, o.currency) }}
+          />
+        </Card>
+      )}
 
       {sp.nouvelle && !customer && (
         <Card><AccountPrompt><AccountForm token={token} name={o.contactName} phone={o.phone} email={o.email} /></AccountPrompt></Card>
@@ -102,10 +148,13 @@ export default async function TrackingPage({ params, searchParams }: { params: P
           <h2 className="font-bold text-navy">Détail</h2>
           <ul className="space-y-1 text-sm">
             {o.items.map((i) => (
-              <li key={i.id} className="flex justify-between gap-3"><span>{i.productName} × {i.quantity}</span><span>{formatMoney(i.unitPrice * i.quantity, o.currency)}</span></li>
+              <li key={i.id} className="flex justify-between gap-3">
+                <span className={o.verifiedAt && !qty(i) ? "text-muted line-through" : ""}>{i.productName} × {o.verifiedAt ? qty(i) || i.quantity : i.quantity}</span>
+                <span>{o.verifiedAt && !qty(i) ? "—" : formatMoney(i.unitPrice * (o.verifiedAt ? qty(i) : i.quantity), o.currency)}</span>
+              </li>
             ))}
             {o.deliveryFee > 0 && <li className="flex justify-between"><span>Livraison</span><span>{formatMoney(o.deliveryFee, o.currency)}</span></li>}
-            <li className="flex justify-between border-t border-line pt-1 font-semibold"><span>Total</span><span>{formatMoney(o.total, o.currency)}</span></li>
+            <li className="flex justify-between border-t border-line pt-1 font-semibold"><span>{o.verifiedAt ? "Total" : "Total estimé (avant vérification)"}</span><span>{formatMoney(o.total, o.currency)}</span></li>
           </ul>
           {payment && (
             <p className="flex flex-wrap items-center gap-2 text-sm">

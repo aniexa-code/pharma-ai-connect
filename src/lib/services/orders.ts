@@ -1,9 +1,9 @@
 // Commandes invitées : création, cycle de vie, paiement, remise.
 // Aucune fonction ici n'exige de compte client ; le rattachement est géré dans accounts.ts.
-import type { Order, OrderStatus, Prisma } from "@prisma/client";
+import type { FulfillmentMode, ItemAnswer, Order, OrderStatus, Prisma } from "@prisma/client";
 import { db } from "../db";
 import { TTL, currency, formatMoney, siteUrl } from "../config";
-import { handoverCode, hashToken, ipFingerprint, newNonce, publicRef, randomToken } from "../crypto";
+import { handoverCode, hashToken, ipFingerprint, newNonce, publicRef, trackingToken } from "../crypto";
 import { ServiceError } from "../errors";
 import { notify } from "../notify";
 import { rateLimit } from "../rate-limit";
@@ -12,8 +12,9 @@ import { firstIssue, orderInput, type Channel, type OrderInput } from "../valida
 export const STATUS_LABEL: Record<OrderStatus, string> = {
   PRESCRIPTION_REVIEW: "Ordonnance à valider par le pharmacien",
   AWAITING_PAYMENT: "En attente de paiement",
-  PLACED: "Enregistrée, en attente de confirmation",
-  CONFIRMED: "Confirmée par la pharmacie",
+  PLACED: "Transmise, vérification en pharmacie",
+  AWAITING_CUSTOMER: "Vérifiée, en attente du client",
+  CONFIRMED: "Confirmée",
   PREPARING: "En préparation",
   READY_FOR_PICKUP: "Prête au retrait",
   COURIER_ASSIGNED: "Livreur attribué",
@@ -32,6 +33,45 @@ export const PAYMENT_LABEL: Record<string, string> = {
   REFUNDED: "Remboursé",
 };
 
+export const ANSWER_LABEL: Record<ItemAnswer, string> = {
+  AVAILABLE: "Disponible",
+  INSUFFICIENT: "Quantité insuffisante",
+  UNAVAILABLE: "Indisponible",
+  NEEDS_PHARMACIST: "Nécessite validation du pharmacien",
+  OTHER: "Autre précision",
+};
+
+export const MODE_LABEL: Record<FulfillmentMode, string> = {
+  PICKUP_ONLY: "Retrait en pharmacie uniquement",
+  DELIVERY_ONLY: "Livraison uniquement",
+  BOTH: "Retrait ou livraison",
+};
+
+/** Qui doit agir pour que la commande avance : affiché au client, à la pharmacie et au livreur. */
+export function responsibleFor(o: Pick<Order, "status" | "fulfillment">): { who: string; what: string; you?: string } | null {
+  switch (o.status) {
+    case "PLACED":
+    case "PRESCRIPTION_REVIEW":
+      return { who: "La pharmacie", what: "vérifie physiquement la disponibilité de chaque produit" };
+    case "AWAITING_CUSTOMER":
+      return { who: "Le client", what: "confirme la commande et choisit retrait ou livraison", you: "confirmez la commande et choisissez retrait ou livraison" };
+    case "AWAITING_PAYMENT":
+      return { who: "Le client", what: "règle la commande en ligne", you: "réglez la commande en ligne" };
+    case "CONFIRMED":
+    case "PREPARING":
+      return o.fulfillment === "PICKUP" ? { who: "La pharmacie", what: "prépare la commande" } : { who: "La pharmacie", what: "prépare la commande et attend un livreur" };
+    case "READY_FOR_PICKUP":
+      return { who: "Le client", what: "vient retirer la commande avec son code", you: "venez retirer la commande avec votre code" };
+    case "COURIER_ASSIGNED":
+      return { who: "Le livreur", what: "se rend à la pharmacie" };
+    case "PICKED_UP":
+    case "OUT_FOR_DELIVERY":
+      return { who: "Le livreur", what: "apporte la commande au client" };
+    default:
+      return null;
+  }
+}
+
 export const METHOD_LABEL: Record<string, string> = {
   CASH: "Paiement à la remise (espèces)",
   MOBILE_MONEY: "Mobile Money",
@@ -42,7 +82,9 @@ const FINAL: OrderStatus[] = ["DELIVERED", "COLLECTED", "CANCELLED"];
 
 /** Transitions autorisées côté pharmacie (la remise finale passe par completeHandover). */
 const NEXT: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  PLACED: ["CONFIRMED", "CANCELLED"],
+  // La confirmation passe par la vérification physique (verifyOrder), puis l'accord du client.
+  PLACED: ["CANCELLED"],
+  AWAITING_CUSTOMER: ["CANCELLED"],
   CONFIRMED: ["PREPARING", "READY_FOR_PICKUP", "COURIER_ASSIGNED", "CANCELLED"],
   PREPARING: ["READY_FOR_PICKUP", "COURIER_ASSIGNED", "CANCELLED"],
   READY_FOR_PICKUP: ["CANCELLED"],
@@ -60,7 +102,7 @@ export function allowedNext(o: Pick<Order, "status" | "fulfillment">): OrderStat
 
 /** Messages volontairement sobres : ni produit ni information de santé dans un SMS. */
 const NOTICE: Partial<Record<OrderStatus, (ref: string, o: Order) => string>> = {
-  CONFIRMED: (r) => `Votre commande ${r} est confirmée par la pharmacie.`,
+  CONFIRMED: (r) => `Votre commande ${r} est confirmée.`,
   READY_FOR_PICKUP: (r) => `Votre commande ${r} est prête au retrait. Présentez votre code de retrait au comptoir.`,
   COURIER_ASSIGNED: (r, o) => `Un livreur${o.courierName ? ` (${o.courierName})` : ""} a été attribué à votre commande ${r}.`,
   PICKED_UP: (r) => `Le livreur a récupéré votre commande ${r} à la pharmacie.`,
@@ -75,7 +117,8 @@ export function trackingUrl(token: string) {
 }
 
 async function notifyOrder(o: Order, event: string, body: string, token?: string) {
-  const link = token ? ` Suivi : ${trackingUrl(token)}` : " Suivez-la avec votre lien de suivi.";
+  const t = token ?? (o.trackingNonce && !o.trackingRevokedAt ? trackingToken(o.trackingNonce) : null);
+  const link = t ? ` Suivi : ${trackingUrl(t)}` : " Suivez-la avec votre lien de suivi.";
   return notify({
     orderId: o.id,
     channel: o.notifyChannel as Channel,
@@ -156,10 +199,12 @@ export async function createGuestOrder(
 
   const subtotal = stocks.reduce((sum, s) => sum + s.price * merged.get(s.productId)!, 0);
   const deliveryFee = input.fulfillment === "DELIVERY" ? pharmacy.deliveryFee : 0;
-  const online = input.paymentMethod !== "CASH";
-  const status: OrderStatus = requiresPrescription ? "PRESCRIPTION_REVIEW" : online ? "AWAITING_PAYMENT" : "PLACED";
+  // Le stock numérique n'engage pas la pharmacie : toute commande commence par une vérification physique.
+  // Rien n'est payé avant que la pharmacie ait confirmé et que le client ait donné son accord.
+  const status: OrderStatus = "PLACED";
 
-  const token = randomToken();
+  const trackingNonce = newNonce();
+  const token = trackingToken(trackingNonce);
   const nonce = newNonce();
   const order = await db.order.create({
     data: {
@@ -181,6 +226,8 @@ export async function createGuestOrder(
       total: subtotal + deliveryFee,
       currency: currency(pharmacy.country),
       trackingTokenHash: hashToken(token),
+      trackingNonce,
+      paymentPreference: input.paymentMethod,
       trackingExpiresAt: new Date(Date.now() + TTL.tracking),
       handoverNonce: nonce,
       requestId: ctx.requestId ?? null,
@@ -195,24 +242,20 @@ export async function createGuestOrder(
         })),
       },
       events: {
-        create: { status, actor: "CUSTOMER", note: requiresPrescription ? "Produit sur ordonnance : validation du pharmacien requise." : null },
-      },
-      payments: {
         create: {
-          method: input.paymentMethod,
-          provider: online ? onlineProvider() : "cash",
-          amount: subtotal + deliveryFee,
+          status,
+          actor: "CUSTOMER",
+          note: requiresPrescription ? "Transmise à la pharmacie. Produit sur ordonnance : validation du pharmacien requise." : "Transmise à la pharmacie pour vérification physique.",
         },
       },
     },
   });
 
   const code = handoverCode(order.id, nonce);
-  const what = input.fulfillment === "PICKUP" ? "retrait" : "remise";
   await notifyOrder(
     order,
     "ORDER_RECEIVED",
-    `Pharma AI Connect : commande ${order.publicRef} enregistrée chez ${pharmacy.name} (${formatMoney(order.total, order.currency)}). Code de ${what} : ${code}, à ne communiquer qu'au moment de la ${what}.`,
+    `Pharma AI Connect : commande ${order.publicRef} transmise à ${pharmacy.name}. La pharmacie vérifie la disponibilité réelle des produits ; vous serez prévenu pour confirmer.`,
     token,
   );
   return { order, token, handoverCode: code };
@@ -224,6 +267,7 @@ async function setStatus(
   actor: string,
   note?: string | null,
   extra: Prisma.OrderUpdateInput = {},
+  notice = true,
 ) {
   const [order] = await db.$transaction([
     db.order.update({
@@ -232,7 +276,7 @@ async function setStatus(
     }),
     db.orderEvent.create({ data: { orderId, status, actor, note: note ?? null } }),
   ]);
-  const body = NOTICE[status]?.(order.publicRef, order);
+  const body = notice ? NOTICE[status]?.(order.publicRef, order) : undefined;
   if (body) await notifyOrder(order, status, body);
   return order;
 }
@@ -288,10 +332,149 @@ export async function reviewPrescription(pharmacyId: string, orderId: string, ap
   return updated;
 }
 
+// ---------- Vérification physique puis accord du client ----------
+
+export type ItemCheck = { answer: ItemAnswer; quantity?: number | null; price?: number | null; note?: string | null };
+
+/** Produits retenus après vérification (disponibles, ou disponibles en quantité réduite). */
+function retainedQty(i: { answer: ItemAnswer | null; confirmedQty: number | null; quantity: number }) {
+  if (i.answer === "AVAILABLE") return i.quantity;
+  if (i.answer === "INSUFFICIENT") return i.confirmedQty ?? 0;
+  return 0;
+}
+
+/**
+ * La pharmacie a vérifié en rayon chaque produit commandé et indique les modes de remise acceptés.
+ * Seule une réponse explicite engage la pharmacie : le stock numérique reste indicatif.
+ */
+export async function verifyOrder(
+  pharmacyId: string,
+  userId: string,
+  orderId: string,
+  input: { items: Record<string, ItemCheck>; modes: FulfillmentMode; pharmacistApproval?: boolean },
+) {
+  const order = await db.order.findFirst({ where: { id: orderId, pharmacyId }, include: { items: true, pharmacy: true } });
+  if (!order) throw new ServiceError("NOT_FOUND", "Commande introuvable.");
+  if (order.status !== "PLACED" && order.status !== "PRESCRIPTION_REVIEW") throw new ServiceError("TRANSITION", "Cette commande a déjà été vérifiée.");
+
+  const updates = order.items.map((item) => {
+    const c = input.items[item.id];
+    if (!c) throw new ServiceError("INVALID", `Indiquez une réponse pour ${item.productName}.`);
+    let confirmedQty: number | null = null;
+    if (c.answer === "INSUFFICIENT") {
+      confirmedQty = Number(c.quantity);
+      if (!Number.isInteger(confirmedQty) || confirmedQty < 1 || confirmedQty >= item.quantity)
+        throw new ServiceError("INVALID", `${item.productName} : indiquez la quantité réellement disponible (entre 1 et ${item.quantity - 1}).`);
+    }
+    if (c.answer === "OTHER" && !c.note?.trim()) throw new ServiceError("INVALID", `${item.productName} : précisez votre réponse.`);
+    const price = c.price === null || c.price === undefined || c.price === 0 ? item.unitPrice : Math.round(c.price);
+    if (!Number.isInteger(price) || price <= 0) throw new ServiceError("INVALID", `${item.productName} : prix invalide.`);
+    return { item, answer: c.answer, confirmedQty, price, note: c.note?.trim().slice(0, 300) || null };
+  });
+
+  const retained = updates.filter((u) => retainedQty({ answer: u.answer, confirmedQty: u.confirmedQty, quantity: u.item.quantity }) > 0);
+  const prescription = retained.some((u) => u.item.regulation === "PRESCRIPTION");
+  if (prescription && !input.pharmacistApproval)
+    throw new ServiceError("PRESCRIPTION", "Un produit sur ordonnance est retenu : validez en tant que pharmacien, ou répondez « Nécessite validation du pharmacien ».");
+
+  let modes = input.modes;
+  if (modes !== "PICKUP_ONLY" && !order.pharmacy.offersDelivery) throw new ServiceError("FULFILLMENT", "Votre pharmacie ne propose pas la livraison.");
+  if (modes !== "DELIVERY_ONLY" && !order.pharmacy.offersPickup) throw new ServiceError("FULFILLMENT", "Votre pharmacie ne propose pas le retrait.");
+  if (prescription) {
+    if (modes === "DELIVERY_ONLY") throw new ServiceError("REGULATED", "Les produits sur ordonnance se retirent en pharmacie, sur présentation de l'ordonnance originale.");
+    modes = "PICKUP_ONLY";
+  }
+
+  const subtotal = retained.reduce((n, u) => n + u.price * retainedQty({ answer: u.answer, confirmedQty: u.confirmedQty, quantity: u.item.quantity }), 0);
+  const now = new Date();
+  await db.$transaction([
+    ...updates.map((u) =>
+      db.orderItem.update({ where: { id: u.item.id }, data: { answer: u.answer, confirmedQty: u.confirmedQty, answerNote: u.note, unitPrice: u.price } }),
+    ),
+    db.order.update({
+      where: { id: order.id },
+      data: {
+        verifiedAt: now,
+        verifiedById: userId,
+        allowedModes: modes,
+        requiresPrescription: prescription,
+        prescriptionCheckedAt: prescription ? now : null,
+        subtotal,
+        total: subtotal,
+        deliveryFee: 0,
+      },
+    }),
+  ]);
+  if (!retained.length) return setStatus(order.id, "CANCELLED", "PHARMACY", "Aucun produit disponible après vérification en pharmacie.");
+  const updated = await setStatus(order.id, "AWAITING_CUSTOMER", "PHARMACY", `Disponibilité vérifiée physiquement. ${MODE_LABEL[modes]}.`);
+  await notifyOrder(
+    updated,
+    "ORDER_VERIFIED",
+    `${order.pharmacy.name} a vérifié votre commande ${updated.publicRef} : ${formatMoney(subtotal, updated.currency)} de produits disponibles. Confirmez-la et choisissez retrait ou livraison.`,
+  );
+  return updated;
+}
+
+/** Modes de remise que le client peut choisir pour une commande vérifiée. */
+export function customerModes(o: { allowedModes: FulfillmentMode | null; requiresPrescription: boolean }) {
+  const m = o.allowedModes ?? "PICKUP_ONLY";
+  const out: ("PICKUP" | "DELIVERY")[] = [];
+  if (m !== "DELIVERY_ONLY") out.push("PICKUP");
+  if (m !== "PICKUP_ONLY" && !o.requiresPrescription) out.push("DELIVERY");
+  return out;
+}
+
+/**
+ * « Je confirme ma commande » : le client accepte les produits et prix confirmés par la pharmacie,
+ * choisit retrait ou livraison, puis paie. Son accord est horodaté dans l'historique.
+ */
+export async function customerConfirm(
+  orderId: string,
+  input: { fulfillment: "PICKUP" | "DELIVERY"; slot: string; paymentMethod: "CASH" | "MOBILE_MONEY" | "CARD"; deliveryAddress?: string; deliveryNotes?: string },
+) {
+  const o = await db.order.findUnique({ where: { id: orderId }, include: { pharmacy: true } });
+  if (!o) throw new ServiceError("NOT_FOUND", "Commande introuvable.");
+  if (o.status !== "AWAITING_CUSTOMER") throw new ServiceError("TRANSITION", "Cette commande n'attend pas votre confirmation.");
+  if (!customerModes(o).includes(input.fulfillment))
+    throw new ServiceError("FULFILLMENT", input.fulfillment === "DELIVERY" ? "La pharmacie n'autorise que le retrait pour cette commande." : "La pharmacie n'autorise que la livraison pour cette commande.");
+  const slot = input.slot.trim().slice(0, 60);
+  if (!slot) throw new ServiceError("INVALID", "Choisissez un créneau.");
+  const address = input.deliveryAddress?.trim().slice(0, 200) ?? "";
+  if (input.fulfillment === "DELIVERY" && address.length < 5) throw new ServiceError("INVALID", "Indiquez l'adresse ou le point de livraison.");
+  if (!availableMethods(o.pharmacy.paymentMethods).includes(input.paymentMethod))
+    throw new ServiceError("PAYMENT", "Ce moyen de paiement n'est pas proposé par cette pharmacie.");
+  if (input.fulfillment === "DELIVERY" && input.paymentMethod === "CASH")
+    throw new ServiceError("PAYMENT", "Une livraison se règle en ligne : choisissez Mobile Money ou carte.");
+
+  const deliveryFee = input.fulfillment === "DELIVERY" ? o.pharmacy.deliveryFee : 0;
+  const total = o.subtotal + deliveryFee;
+  const online = input.paymentMethod !== "CASH";
+  const next: OrderStatus = online ? "AWAITING_PAYMENT" : "CONFIRMED";
+  // Un seul accord possible, même en cas de double clic.
+  const claimed = await db.order.updateMany({ where: { id: o.id, status: "AWAITING_CUSTOMER" }, data: { customerConfirmedAt: new Date() } });
+  if (claimed.count !== 1) throw new ServiceError("TRANSITION", "Cette commande a déjà été confirmée.");
+  await db.payment.create({ data: { orderId: o.id, method: input.paymentMethod, provider: online ? onlineProvider() : "cash", amount: total } });
+  const updated = await setStatus(o.id, next, "CUSTOMER", "Autorisation client : CONFIRMÉE.", {
+    fulfillment: input.fulfillment,
+    slot,
+    deliveryAddress: input.fulfillment === "DELIVERY" ? address : null,
+    deliveryNotes: input.fulfillment === "DELIVERY" ? input.deliveryNotes?.trim().slice(0, 300) || null : null,
+    deliveryFee,
+    total,
+  }, false);
+  const what = input.fulfillment === "PICKUP" ? "retrait" : "remise";
+  await notifyOrder(
+    updated,
+    "ORDER_CONFIRMED_BY_CUSTOMER",
+    `Commande ${updated.publicRef} confirmée (${formatMoney(total, updated.currency)}). Code de ${what} : ${handoverCode(updated.id, updated.handoverNonce)}, à ne communiquer qu'au moment de la ${what}.`,
+  );
+  return updated;
+}
+
 /** Annulation par le client (porteur du lien de suivi) tant que la préparation n'a pas commencé. */
 export async function customerCancel(orderId: string) {
   const order = await db.order.findUniqueOrThrow({ where: { id: orderId } });
-  if (!["PRESCRIPTION_REVIEW", "AWAITING_PAYMENT", "PLACED", "CONFIRMED"].includes(order.status))
+  if (!["PRESCRIPTION_REVIEW", "AWAITING_PAYMENT", "PLACED", "AWAITING_CUSTOMER", "CONFIRMED"].includes(order.status))
     throw new ServiceError("TRANSITION", "La préparation a commencé : contactez la pharmacie pour annuler.");
   await refundIfPaid(order.id);
   return setStatus(order.id, "CANCELLED", "CUSTOMER", "Annulée par le client.");
@@ -351,7 +534,7 @@ export async function applyPaymentResult(paymentId: string, result: "CONFIRMED" 
   await db.payment.update({ where: { id: payment.id }, data: { status: result, providerRef: payment.providerRef ?? `SBX-${Date.now()}` } });
   const o = payment.order;
   if (result === "CONFIRMED") {
-    const next: OrderStatus = o.prescriptionCheckedAt ? "CONFIRMED" : "PLACED";
+    const next: OrderStatus = o.verifiedAt || o.prescriptionCheckedAt ? "CONFIRMED" : "PLACED";
     await setStatus(o.id, next, "PAYMENT", "Paiement confirmé.");
     await notifyOrder(o, "PAYMENT_CONFIRMED", `Paiement reçu pour votre commande ${o.publicRef} (${formatMoney(payment.amount, o.currency)}).`);
   } else {
@@ -373,7 +556,9 @@ export async function retryPayment(orderId: string, method: "CASH" | "MOBILE_MON
   const payment = await db.payment.create({
     data: { orderId, method, provider: method === "CASH" ? "cash" : onlineProvider(), amount: o.total },
   });
-  if (method === "CASH") await setStatus(o.id, o.prescriptionCheckedAt ? "CONFIRMED" : "PLACED", "CUSTOMER", "Paiement à la remise choisi.");
+  if (method === "CASH" && o.fulfillment === "DELIVERY" && o.verifiedAt)
+    throw new ServiceError("PAYMENT", "Une livraison se règle en ligne : choisissez Mobile Money ou carte.");
+  if (method === "CASH") await setStatus(o.id, o.verifiedAt || o.prescriptionCheckedAt ? "CONFIRMED" : "PLACED", "CUSTOMER", "Paiement à la remise choisi.");
   return payment;
 }
 

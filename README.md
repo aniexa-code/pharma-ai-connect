@@ -60,8 +60,8 @@ Données de démonstration : 6 pharmacies fictives à Cotonou et Abomey-Calavi (
 Les tests utilisent une base PostgreSQL dont le nom contient « test » (voir `.env.test`).
 
 ```bash
-npm test          # 44 tests (acceptation, sécurité, zone de recherche, réglages, stock)
-npm run build && npm run test:e2e   # parcours complet dans Chromium (14 étapes, livreur, administration et import de stock compris)
+npm test          # 48 tests (acceptation, sécurité, zone de recherche, réglages, stock, confirmation)
+npm run build && npm run test:e2e   # parcours complet dans Chromium (15 étapes : livreur, administration, import de stock et confirmation en deux temps compris)
 ```
 
 Le test exigé au § 9 (« personne ne peut consulter la commande d'un autre en devinant ou en connaissant son numéro ») est couvert par `tests/security.test.ts` et l'étape 7 de `tests/e2e/run.ts`.
@@ -83,6 +83,10 @@ Une pharmacie n'est jamais affichée « ouverte » sur des données périmées :
 ## Stock numérique
 
 Depuis `/pharmacie/stock`, la pharmacie recherche et filtre son stock, ajoute ou retire un produit du référentiel, modifie prix, quantité et disponibilité, et exporte le tout en CSV ou Excel. L'import (CSV ou .xlsx, 2 Mo, 5000 lignes) se fait en deux temps : un rapport classe chaque ligne (correcte, incorrecte, produit inconnu, doublon, champ manquant, erreur de format), puis seules les lignes correctes sont publiées, sur confirmation. Un fichier exporté peut être corrigé et réimporté tel quel. Un produit absent du référentiel n'est jamais créé par un import : la classification réglementaire reste décidée par Pharma AI Connect.
+
+## Commande en deux temps
+
+Le stock numérique n'engage pas la pharmacie. Toute commande commence donc par une vérification physique : pour chaque produit, la pharmacie répond Disponible, Quantité insuffisante (avec la quantité réelle), Indisponible, Nécessite validation du pharmacien ou Autre précision, confirme le prix et indique si elle autorise le retrait, la livraison ou les deux. Le client reçoit une notification avec le lien vers sa commande, voit les produits retenus et leurs prix, puis clique « Je confirme ma commande » en choisissant retrait ou livraison. Rien n'est payé avant cet accord, qui est horodaté dans l'historique (« Autorisation client : CONFIRMÉE »). Une livraison se règle en ligne ; un produit sur ordonnance exige la validation du pharmacien et se retire en pharmacie. Chaque écran indique qui doit agir à l'étape en cours.
 
 ## Limites connues de cette version
 
