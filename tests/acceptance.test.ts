@@ -23,6 +23,16 @@ describe("Recherche sans inscription", () => {
     assert.ok(byDci.some((p) => p.slug === "vitamine-c-500"));
   });
 
+  test("la recherche ignore les accents et les majuscules", async () => {
+    for (const q of ["paracetamol", "PARACÉTAMOL", "Paracétamol"]) {
+      assert.ok((await searchProducts(q)).some((p) => p.slug === "paracetamol-500"), q);
+    }
+    assert.ok((await searchProducts("omeprazole")).some((p) => p.slug === "omeprazole-20"));
+    assert.equal((await searchProducts("100%")).length, 0, "les jokers SQL saisis sont pris à la lettre");
+    assert.equal((await resolvePlace("talangai"))?.label, "Talangaï, Brazzaville");
+    assert.equal((await resolvePlace("Makelekele"))?.label, "Makélékélé, Brazzaville");
+  });
+
   test("résultats : distance, horaires, disponibilité, fiabilité et date de confirmation", async () => {
     const point = await resolvePlace("Plateau");
     assert.ok(point, "le quartier saisi est reconnu sans géolocalisation");

@@ -1,29 +1,42 @@
 // Recherche de médicaments et de pharmacies, ouverte à tous sans inscription.
-import type { Pharmacy, Stock } from "@prisma/client";
+import { Prisma, type Pharmacy, type Stock } from "@prisma/client";
 import { db } from "../db";
 import { distanceKm, type Point } from "../geo";
 import { openStatus, type OpenStatus, type WeeklyHours } from "../hours";
 import { reliability, type Reliability } from "../reliability";
 
+// Recherche insensible à la casse et aux accents : « paracetamol » trouve « Paracétamol »,
+// « Talangai » trouve « Talangaï ». Les deux côtés sont ramenés à des minuscules sans accent.
+const ACCENTED = "àáâãäåçèéêëìíîïñòóôõöùúûüýÿÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝ";
+const PLAIN = ACCENTED.normalize("NFD").replace(/\p{M}/gu, "");
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+
+async function idsMatching(table: "Product" | "Zone" | "Pharmacy", columns: string[], term: string, exact = false) {
+  const escaped = fold(term).replace(/[\\%_]/g, "\\$&");
+  const value = exact ? escaped : `%${escaped}%`;
+  const where = Prisma.join(
+    columns.map((c) => Prisma.sql`lower(translate(${Prisma.raw(`"${c}"`)}, ${ACCENTED}, ${PLAIN})) LIKE ${value}`),
+    " OR ",
+  );
+  const rows = await db.$queryRaw<{ id: string }[]>`SELECT id FROM ${Prisma.raw(`"${table}"`)} WHERE ${where}`;
+  return rows.map((r) => r.id);
+}
+
 export async function searchProducts(q: string, take = 8) {
   const term = q.trim();
   if (term.length < 2) return [];
-  return db.product.findMany({
-    where: { OR: [{ name: { contains: term, mode: "insensitive" } }, { dci: { contains: term, mode: "insensitive" } }] },
-    orderBy: { name: "asc" },
-    take,
-  });
+  const ids = await idsMatching("Product", ["name", "dci"], term);
+  return db.product.findMany({ where: { id: { in: ids } }, orderBy: { name: "asc" }, take });
 }
 
 /** Lieu saisi (ville, quartier) → point de référence, d'après le référentiel des zones. */
 export async function resolvePlace(place: string): Promise<(Point & { label: string }) | null> {
   const term = place.trim();
   if (!term) return null;
-  const zone =
-    (await db.zone.findFirst({ where: { name: { equals: term, mode: "insensitive" } } })) ??
-    (await db.zone.findFirst({ where: { name: { contains: term, mode: "insensitive" } } }));
+  const [zoneId] = (await idsMatching("Zone", ["name"], term, true)).concat(await idsMatching("Zone", ["name"], term));
+  const zone = zoneId ? await db.zone.findUnique({ where: { id: zoneId } }) : null;
   if (zone) return { lat: zone.lat, lng: zone.lng, label: `${zone.name}, ${zone.city}` };
-  const cityZones = await db.zone.findMany({ where: { city: { equals: term, mode: "insensitive" } } });
+  const cityZones = await db.zone.findMany({ where: { id: { in: await idsMatching("Zone", ["city"], term, true) } } });
   if (!cityZones.length) return null;
   return {
     lat: cityZones.reduce((s, z) => s + z.lat, 0) / cityZones.length,
@@ -47,9 +60,7 @@ export async function searchPharmacies(opts: { productId?: string | null; point?
   const pharmacies = await db.pharmacy.findMany({
     where: {
       active: true,
-      ...(!point && opts.place
-        ? { OR: [{ city: { contains: opts.place, mode: "insensitive" } }, { district: { contains: opts.place, mode: "insensitive" } }] }
-        : {}),
+      ...(!point && opts.place ? { id: { in: await idsMatching("Pharmacy", ["city", "district"], opts.place) } } : {}),
     },
     include: productId ? { stocks: { where: { productId } } } : undefined,
   });
