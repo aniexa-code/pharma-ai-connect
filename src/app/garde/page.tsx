@@ -1,3 +1,4 @@
+import { countryInfo } from "@/lib/config";
 import type { Metadata } from "next";
 import { Icon } from "@/components/brand";
 import { PharmacyMapList } from "@/components/NetworkMap";
@@ -10,8 +11,8 @@ export const metadata: Metadata = { title: "Pharmacies de garde" };
 export const dynamic = "force-dynamic";
 
 export default async function OnDutyPage() {
-  const center = await resolvePlace("Brazzaville");
-  const results = (await searchPharmacies({ point: center, radiusKm: 50 })).filter((r) => r.pharmacy.onDuty);
+  const center = await resolvePlace(countryInfo().defaultCity);
+  const results = (await searchPharmacies({ point: center, radiusKm: 50 })).filter((r) => r.onDuty);
   const updates = await lastStockUpdates(results.map((r) => r.pharmacy.id));
   return (
     <div className="space-y-6">

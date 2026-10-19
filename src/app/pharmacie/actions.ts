@@ -7,7 +7,10 @@ import { db } from "@/lib/db";
 import { publicMessage } from "@/lib/errors";
 import { authenticatePharmacyUser } from "@/lib/services/accounts";
 import { addOrderMessage, completeHandover, pharmacyAdvance, regenerateHandoverCode, reviewPrescription } from "@/lib/services/orders";
+import { confirmHours, declareDuty, endDuty } from "@/lib/services/pharmacies";
 import { pharmacyRespond } from "@/lib/services/requests";
+import { timezone } from "@/lib/config";
+import { zonedWallTimeToUtc } from "@/lib/hours";
 
 export type FormState = { error?: string; info?: string };
 
@@ -109,4 +112,23 @@ export async function updateStock(fd: FormData) {
     });
   }
   revalidatePath("/pharmacie");
+}
+
+/** Horaires et garde : confirmation des horaires, déclaration ou fin de garde. */
+export async function hoursAction(_: FormState, fd: FormData): Promise<FormState> {
+  const u = await requirePharmacyUser();
+  try {
+    const action = String(fd.get("action"));
+    if (action === "confirm") await confirmHours(u.pharmacyId, u.id);
+    else if (action === "end") await endDuty(u.pharmacyId, u.id);
+    else if (action === "duty") {
+      const until = zonedWallTimeToUtc(String(fd.get("until") ?? ""), timezone(u.pharmacy.country));
+      if (!until) return { error: "Indiquez la date et l'heure de fin de garde." };
+      await declareDuty(u.pharmacyId, u.id, until);
+    }
+  } catch (e) {
+    return { error: publicMessage(e) };
+  }
+  revalidatePath("/pharmacie");
+  return {};
 }

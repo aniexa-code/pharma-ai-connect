@@ -90,3 +90,12 @@ export async function authenticateCourier(emailRaw: string, password: string, ip
   if (!c || !c.active || !(await bcrypt.compare(password, c.passwordHash))) throw new ServiceError("AUTH", "E-mail ou mot de passe incorrect.");
   return c;
 }
+
+export async function authenticateAdmin(emailRaw: string, password: string, ip = "unknown") {
+  const email = emailRaw.trim().toLowerCase();
+  if (!(await rateLimit(`alogin:${ip}`, 10, 900_000)) || !(await rateLimit(`alogin:${email}`, 5, 900_000)))
+    throw new ServiceError("RATE", "Trop d'essais. Réessayez dans 15 minutes.");
+  const a = await db.adminUser.findUnique({ where: { email } });
+  if (!a || !a.active || !(await bcrypt.compare(password, a.passwordHash))) throw new ServiceError("AUTH", "E-mail ou mot de passe incorrect.");
+  return a;
+}

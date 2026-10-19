@@ -4,13 +4,35 @@ export function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 }
 
-export function currency() {
-  return process.env.CURRENCY || "XAF";
+/**
+ * Pays pris en charge. Ajouter un pays = ajouter une ligne ici (devise, fuseau, indicatif) ;
+ * ses règles (frais, seuils, champs réglementaires) se règlent ensuite dans l'administration.
+ */
+export const COUNTRIES: Record<string, { name: string; currency: string; timezone: string; dialCode: string; defaultCity: string; payoutMethods: string[] }> = {
+  BJ: { name: "Bénin", currency: "XOF", timezone: "Africa/Porto-Novo", dialCode: "+229", defaultCity: "Cotonou", payoutMethods: ["MOBILE_MONEY", "MOOV_MONEY"] },
+};
+
+export function defaultCountryCode() {
+  return process.env.DEFAULT_COUNTRY && COUNTRIES[process.env.DEFAULT_COUNTRY] ? process.env.DEFAULT_COUNTRY : "BJ";
 }
 
-export function timezone() {
-  return process.env.TIMEZONE || "Africa/Brazzaville";
+export function countryInfo(code = defaultCountryCode()) {
+  return COUNTRIES[code] ?? COUNTRIES.BJ;
 }
+
+// La devise et le fuseau viennent du pays (les anciennes variables CURRENCY et TIMEZONE sont ignorées).
+export function currency(country?: string) {
+  return countryInfo(country).currency;
+}
+
+export function timezone(country?: string) {
+  return countryInfo(country).timezone;
+}
+
+export const PAYOUT_METHOD_LABEL: Record<string, string> = {
+  MOBILE_MONEY: "MTN Mobile Money",
+  MOOV_MONEY: "Moov Money",
+};
 
 export function authSecret() {
   const s = process.env.AUTH_SECRET;

@@ -10,7 +10,8 @@ import { availability } from "@/lib/availability";
 import { formatMoney } from "@/lib/config";
 import { db } from "@/lib/db";
 import { formatDistance } from "@/lib/geo";
-import { hoursLines, openStatus, type WeeklyHours } from "@/lib/hours";
+import { hoursLines, isOnDuty, pharmacyOpenStatus, type WeeklyHours } from "@/lib/hours";
+import { getSettings } from "@/lib/settings";
 import { directionsUrl } from "@/lib/map-items";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,9 @@ export default async function PharmacyPage({ params, searchParams }: { params: P
   if (!p) notFound();
   const customer = await getCustomer();
   const fav = customer ? await db.favoritePharmacy.findUnique({ where: { customerId_pharmacyId: { customerId: customer.id, pharmacyId: p.id } } }) : null;
-  const open = openStatus(p.openingHours as WeeklyHours, p.onDuty);
+  const { search } = await getSettings(p.country);
+  const open = pharmacyOpenStatus(p, new Date(), search.hoursMaxAgeDays);
+  const onDuty = isOnDuty(p);
   const focus = sp.produit ? p.stocks.find((s) => s.product.slug === sp.produit) : undefined;
   const focusA = focus ? availability(focus) : null;
   const focusOrderable = focus && focus.product.regulation !== "RESTRICTED" && focus.status !== "OUT";
@@ -49,7 +52,7 @@ export default async function PharmacyPage({ params, searchParams }: { params: P
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-extrabold text-navy sm:text-3xl">{p.name}</h1>
-              {p.onDuty && <DutyBadge />}
+              {onDuty && <DutyBadge />}
             </div>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
               <span className="inline-flex items-center gap-1"><Icon name="pin" size={15} />{p.address}, {p.district}, {p.city}</span>
@@ -139,7 +142,7 @@ export default async function PharmacyPage({ params, searchParams }: { params: P
         <div className="space-y-6">
           <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-line bg-white">
             <NetworkMap
-              items={[{ id: p.id, slug: p.slug, name: p.name, district: p.district, lat: p.lat, lng: p.lng, href: "", state: focusA?.state ?? null, stateLabel: "", updated: null, open: open.open, openLabel: open.label, onDuty: p.onDuty, distance: null, directions: "" }]}
+              items={[{ id: p.id, slug: p.slug, name: p.name, district: p.district, lat: p.lat, lng: p.lng, href: "", state: focusA?.state ?? null, stateLabel: "", updated: null, open: open.open, openLabel: open.label, onDuty, distance: null, directions: "" }]}
               activeId={p.id}
             />
           </div>

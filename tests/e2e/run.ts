@@ -56,13 +56,13 @@ async function main() {
 
     await check("rechercher un médicament et consulter les résultats", async () => {
       await client.fill("input[name=q]", "ibuprof");
-      await client.fill("input[name=lieu]", "Talangaï");
+      await client.fill("input[name=lieu]", "Godomey");
       await client.click("#search-form button[type=submit]");
       await client.waitForURL(/\/recherche/);
-      const card = client.getByTestId("pharmacy-result").filter({ hasText: "Talangaï" });
+      const card = client.getByTestId("pharmacy-result").filter({ hasText: "Godomey" });
       await card.waitFor();
       const text = await card.innerText();
-      assert.match(text, /Talangaï/);
+      assert.match(text, /Godomey/);
       assert.match(text, /Disponible|Confirmation nécessaire|Indisponible|Information ancienne/);
       assert.match(text, /Mis à jour il y a|Jamais/);
       assert.match(text, /À \d/);
@@ -70,10 +70,44 @@ async function main() {
       await shot(client, "resultats");
     });
 
+    await check("zone vide : élargissement proposé, jamais automatique", async () => {
+      const visitor = await (await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "fr-FR" })).newPage();
+      await visitor.goto(`${BASE}/recherche?lieu=Agla&rayon=1`);
+      const panel = visitor.getByTestId("expand-zone");
+      await panel.waitFor();
+      assert.match(await panel.innerText(), /Nous n'avons trouvé aucune pharmacie correspondant à votre recherche dans votre zone actuelle\. Voulez-vous élargir votre zone de recherche \?/);
+      assert.ok(await panel.getByRole("link", { name: "Élargir à 10 km" }).isVisible());
+      assert.ok(await panel.getByRole("link", { name: "Modifier ma zone" }).isVisible());
+      await shot(visitor, "elargir-zone");
+      await panel.getByRole("link", { name: "Élargir à 5 km" }).click();
+      await visitor.waitForURL(/rayon=5/);
+      await visitor.getByTestId("pharmacy-result").first().waitFor();
+      assert.equal(await visitor.getByTestId("expand-zone").count(), 0);
+      await visitor.close();
+    });
+
+    await check("administration : réglages modifiables et tracés", async () => {
+      const admin = await (await browser.newContext()).newPage();
+      await admin.goto(`${BASE}/admin`);
+      await admin.waitForURL(/\/admin\/connexion/);
+      await admin.fill("input[name=email]", "admin@demo.pharma-ai.local");
+      await admin.fill("input[name=password]", PASSWORD);
+      await admin.click("button[type=submit]");
+      await admin.waitForURL(`${BASE}/admin`);
+      await admin.goto(`${BASE}/admin/reglages`);
+      await admin.fill("input[name='search.hoursMaxAgeDays']", "90");
+      await admin.getByRole("button", { name: "Enregistrer les réglages" }).click();
+      await admin.getByText("Réglages enregistrés").waitFor();
+      await admin.goto(`${BASE}/admin`);
+      await admin.getByText("Réglages modifiés").first().waitFor();
+      await shot(admin, "admin");
+      await admin.close();
+    });
+
     let requestUrl = "";
     await check("demander une confirmation à une pharmacie, sans compte", async () => {
-      await client.getByTestId("pharmacy-result").filter({ hasText: "Talangaï" }).getByRole("link", { name: /Voir/ }).click();
-      await client.waitForURL(/\/pharmacies\/pharmacie-de-talangai/);
+      await client.getByTestId("pharmacy-result").filter({ hasText: "Godomey" }).getByRole("link", { name: /Voir/ }).click();
+      await client.waitForURL(/\/pharmacies\/pharmacie-de-godomey/);
       await client.getByTestId("availability").first().waitFor();
       await shot(client, "fiche");
       await client.getByRole("link", { name: "Confirmer avec la pharmacie" }).click();
@@ -81,7 +115,7 @@ async function main() {
       await client.fill("input[name=quantity]", "2");
       await client.fill("input[name=contactName]", "Grâce");
       await client.selectOption("select[name=notifyChannel]", "WHATSAPP");
-      await client.fill("input[name=phone]", "+242 06 123 45 67");
+      await client.fill("input[name=phone]", "+229 01 96 123 45 67");
       await client.click("button[type=submit]");
       await client.waitForURL(/\/demande\/[A-Za-z0-9_-]{43}/);
       requestUrl = client.url().split("?")[0];
@@ -90,7 +124,7 @@ async function main() {
     });
 
     await check("recevoir une réponse de la pharmacie", async () => {
-      await pharmacyLogin(pharmacist, "pharmacie-de-talangai");
+      await pharmacyLogin(pharmacist, "pharmacie-de-godomey");
       await pharmacist.click("a[href^='/pharmacie/demandes/']");
       await pharmacist.selectOption("select[name=status]", "CONFIRMED");
       await pharmacist.fill("textarea[name=message]", "Oui, 2 boîtes mises de côté.");
@@ -108,7 +142,7 @@ async function main() {
       await client.waitForURL(/\/commander/);
       assert.equal(await client.locator("input[type=password]").count(), 0, "aucun mot de passe demandé");
       await client.fill("input[name=contactName]", "Grâce");
-      await client.fill("input[name=phone]", "+242 06 123 45 67");
+      await client.fill("input[name=phone]", "+229 01 96 123 45 67");
       await client.check("input[name=paymentMethod][value=CASH]");
       await shot(client, "commande");
       await client.click("text=Confirmer la demande");
@@ -140,7 +174,7 @@ async function main() {
       }
       await outsider.goto(`${BASE}/suivi`);
       await outsider.fill("input[name=ref]", ref);
-      await outsider.fill("input[name=phone]", "+242 06 000 00 00");
+      await outsider.fill("input[name=phone]", "+229 01 96 000 00 00");
       await outsider.click("button[type=submit]");
       await outsider.getByText("Si ces informations correspondent").waitFor();
       assert.equal(await outsider.getByTestId("demo-code").count(), 0, "aucun code émis pour un mauvais numéro");
@@ -152,16 +186,16 @@ async function main() {
 
     let deliveryUrl = "";
     await check("choisir la livraison et payer en ligne (Mobile Money)", async () => {
-      await client.goto(`${BASE}/pharmacies/pharmacie-du-plateau`);
+      await client.goto(`${BASE}/pharmacies/pharmacie-de-ganhi`);
       const para = await db.product.findUniqueOrThrow({ where: { slug: "sro" } });
       await client.fill(`input[name=q_${para.id}]`, "3");
       await client.click("text=Commander la sélection");
       await client.waitForURL(/\/commander/);
       await client.locator("label", { hasText: "Livraison" }).first().click();
-      await client.fill("input[name=deliveryAddress]", "Rue Mbochis, portail bleu, Poto-Poto");
+      await client.fill("input[name=deliveryAddress]", "Rue 12.054, portail bleu, Agla");
       await client.fill("input[name=contactName]", "Paul");
       await client.selectOption("select[name=notifyChannel]", "LINK");
-      await client.fill("input[name=phone]", "+242 05 765 43 21");
+      await client.fill("input[name=phone]", "+229 01 95 765 43 21");
       await client.check("input[name=paymentMethod][value=MOBILE_MONEY]");
       await client.click("text=Confirmer la demande");
       await client.waitForURL(/\/paiement/);
@@ -178,7 +212,7 @@ async function main() {
     await check("suivre la livraison et recevoir les notifications nécessaires", async () => {
       const code = await client.getByTestId("handover-code").innerText();
       const dref = await client.getByTestId("order-ref").innerText();
-      await pharmacyLogin(pharmacist, "pharmacie-du-plateau");
+      await pharmacyLogin(pharmacist, "pharmacie-de-ganhi");
       await pharmacist.click(`text=${dref}`);
       const advance = async (label: string) => {
         await pharmacist.getByRole("button", { name: `→ ${label}` }).click();
@@ -195,7 +229,7 @@ async function main() {
       await courier.click("button[type=submit]");
       await courier.waitForURL(`${BASE}/livreur`);
       const mission = courier.getByTestId("open-mission").first();
-      assert.match(await mission.innerText(), /Zone client : Poto-Poto/);
+      assert.match(await mission.innerText(), /Zone client : Agla/);
       assert.ok(!(await mission.innerText()).includes("portail bleu"), "adresse exacte masquée avant acceptation");
       await shot(courier, "livreur-missions");
       await mission.getByRole("button", { name: "Accepter" }).click();
@@ -237,7 +271,7 @@ async function main() {
       await client.waitForURL(`${BASE}/compte`);
       await client.click("text=Rattacher une commande");
       await client.fill("input[name=ref]", ref);
-      await client.fill("input[name=phone]", "+242061234567");
+      await client.fill("input[name=phone]", "+22901961234567");
       await client.click("button[type=submit]");
       const demo = await client.locator("strong.font-mono").innerText();
       await client.fill("input[name=code]", demo);

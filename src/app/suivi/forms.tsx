@@ -15,7 +15,7 @@ export function RecoveryForm() {
           <Input name="ref" required placeholder="CMD-XXXX-XXXX" className="font-mono uppercase" />
         </Field>
         <Field label="Téléphone utilisé pour la commande">
-          <Input name="phone" type="tel" required placeholder="+242 06 123 45 67" />
+          <Input name="phone" type="tel" required placeholder="+229 01 97 12 34 56" />
         </Field>
         <Alert>{asked.error}</Alert>
         <SubmitButton className="w-full">Recevoir mon code de suivi</SubmitButton>

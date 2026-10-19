@@ -21,7 +21,7 @@ export function ContactFields({ phoneRequired = false, defaults = {} }: { phoneR
       </Field>
       {needsPhone && (
         <Field label="Téléphone" hint={phoneRequired ? "Pour que la pharmacie puisse vous joindre au sujet de la commande." : undefined}>
-          <Input name="phone" type="tel" required defaultValue={defaults.phone} placeholder="+242 06 123 45 67" autoComplete="tel" />
+          <Input name="phone" type="tel" required defaultValue={defaults.phone} placeholder="+229 01 97 12 34 56" autoComplete="tel" />
         </Field>
       )}
       {channel === "EMAIL" && (
