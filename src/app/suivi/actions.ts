@@ -5,7 +5,7 @@ import { clientIp, getCustomer, startCustomerSession } from "@/lib/auth";
 import { ServiceError, publicMessage } from "@/lib/errors";
 import { demoMode } from "@/lib/notify";
 import { claimWithTrackingToken, registerCustomer } from "@/lib/services/accounts";
-import { addOrderMessage, applyPaymentResult, customerCancel, customerConfirm, retryPayment } from "@/lib/services/orders";
+import { addOrderMessage, applyPaymentResult, customerCancel, customerClose, customerConfirm, retryPayment } from "@/lib/services/orders";
 import { orderByTrackingToken, recoverTracking, requestCode, rotateTrackingToken } from "@/lib/services/tracking";
 
 export type FormState = { error?: string; info?: string; step?: "code"; ref?: string; demoCode?: string };
@@ -80,6 +80,19 @@ export async function confirmOrder(_: FormState, fd: FormData): Promise<FormStat
     return { error: publicMessage(e) };
   }
   redirect(next);
+}
+
+/** Clôture côté client : réception confirmée, ou problème signalé. */
+export async function closeOrder(_: FormState, fd: FormData): Promise<FormState> {
+  const token = String(fd.get("token"));
+  const received = fd.get("received") === "1";
+  try {
+    await customerClose((await order(token)).id, received, String(fd.get("note") ?? ""));
+  } catch (e) {
+    return { error: publicMessage(e) };
+  }
+  revalidatePath(`/suivi/${token}`);
+  return { info: received ? "Merci, votre commande est clôturée de votre côté." : "Problème transmis à la pharmacie. Elle vous répondra ici." };
 }
 
 // ---------- Paiement (prestataire simulé) ----------

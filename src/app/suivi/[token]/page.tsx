@@ -11,11 +11,11 @@ import { Alert, Badge, ButtonLink, Card, Eyebrow } from "@/components/ui";
 import { getCustomer } from "@/lib/auth";
 import { ORDER_SLOTS, formatMoney } from "@/lib/config";
 import { CHANNEL_LABEL } from "@/lib/notify";
-import { ANSWER_LABEL, METHOD_LABEL, PAYMENT_LABEL, availableMethods, customerModes, isFinal, responsibleFor, trackingUrl } from "@/lib/services/orders";
+import { ANSWER_LABEL, METHOD_LABEL, PAYMENT_LABEL, availableMethods, closureParties, customerModes, isFinal, responsibleFor, trackingUrl } from "@/lib/services/orders";
 import { orderByTrackingToken, visibleHandoverCode } from "@/lib/services/tracking";
 import { maskPhone } from "@/lib/validation";
 import { attachToMyAccount, cancelOrder, newTrackingLink } from "../actions";
-import { AccountForm, ConfirmOrderForm, OrderMessageForm } from "../forms";
+import { AccountForm, CloseOrderForm, ConfirmOrderForm, OrderMessageForm } from "../forms";
 
 export const metadata: Metadata = { title: "Suivi de commande", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -60,6 +60,7 @@ export default async function TrackingPage({ params, searchParams }: { params: P
         <div className="grid gap-6 md:grid-cols-[1.1fr_1fr]">
           <OrderTimeline
             status={o.status}
+            closed={!!o.closedAt}
             fulfillment={o.fulfillment}
             events={o.events}
             createdAt={o.createdAt}
@@ -95,6 +96,21 @@ export default async function TrackingPage({ params, searchParams }: { params: P
         )}
         {o.customerConfirmedAt && <p className="text-xs text-muted" data-testid="customer-authorization">Autorisation client : <strong className="text-turq-700">CONFIRMÉE</strong> le {formatDate(o.customerConfirmedAt)}</p>}
       </Card>
+
+      {["DELIVERED", "COLLECTED"].includes(o.status) && (
+        <Card className="space-y-3" data-testid="closure">
+          <h2 className="font-bold text-navy">{o.closedAt ? "Commande clôturée" : "Clôture de la commande"}</h2>
+          <ul className="flex flex-wrap gap-2 text-sm">
+            {closureParties(o).map((p) => (
+              <li key={p.key} className={`rounded-full px-3 py-1 font-semibold ${p.at ? "bg-turq-50 text-turq-700" : "bg-warn-50 text-[#a8611d]"}`}>
+                {p.key === "customer" ? "Vous" : p.label} : {p.at ? "clôturé" : "en attente"}
+              </li>
+            ))}
+          </ul>
+          {o.customerIssue && !o.customerClosedAt && <Alert tone="amber">Problème signalé : {o.customerIssue}. La pharmacie vous répond dans l'échange ci-dessous.</Alert>}
+          {!o.customerClosedAt && <CloseOrderForm token={token} pickup={pickup} />}
+        </Card>
+      )}
 
       {awaitingMe && (
         <Card className="space-y-4 ring-2 ring-blue/30" data-testid="awaiting-customer">

@@ -52,8 +52,9 @@ function stepIndex(status: OrderStatus) {
 const STEP_STATUSES: OrderStatus[][] = [[], ["PRESCRIPTION_REVIEW", "PLACED"], ["AWAITING_CUSTOMER", "AWAITING_PAYMENT", "CONFIRMED"], ["PREPARING"], ["READY_FOR_PICKUP", "COURIER_ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY"], ["DELIVERED", "COLLECTED"]];
 
 /** Timeline de suivi : l'étape en cours pulse en turquoise. */
-export function OrderTimeline({ status, fulfillment, events, createdAt, detail }: { status: OrderStatus; fulfillment: "PICKUP" | "DELIVERY"; events: OrderEvent[]; createdAt: Date; detail?: string | null }) {
-  const current = stepIndex(status);
+export function OrderTimeline({ status, fulfillment, events, createdAt, detail, closed = true }: { status: OrderStatus; fulfillment: "PICKUP" | "DELIVERY"; events: OrderEvent[]; createdAt: Date; detail?: string | null; closed?: boolean }) {
+  // Remise faite mais clôture incomplète : l'étape « Terminée » reste en cours.
+  const current = stepIndex(status) === 6 && !closed ? 5 : stepIndex(status);
   const cancelled = status === "CANCELLED";
   const lastIdx = cancelled ? Math.max(0, ...events.filter((e) => e.status !== "CANCELLED").map((e) => stepIndex(e.status) - 1)) : -1;
   return (

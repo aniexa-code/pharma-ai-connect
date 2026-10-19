@@ -7,7 +7,7 @@ import { authSecret } from "./config";
 const ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 /** Référence publique lisible et non prévisible, ex. CMD-7KQ2-M9XD (≈ 39 bits d'aléa). */
-export function publicRef(prefix: "CMD" | "VER" | "MSG") {
+export function publicRef(prefix: "CMD" | "VER" | "MSG" | "PAN") {
   let s = "";
   for (let i = 0; i < 8; i++) s += ALPHABET[randomInt(ALPHABET.length)];
   return `${prefix}-${s.slice(0, 4)}-${s.slice(4)}`;

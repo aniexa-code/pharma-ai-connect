@@ -268,6 +268,13 @@ async function main() {
       const mine = courier.getByTestId("my-mission");
       await mine.getByText("portail bleu").waitFor();
       await mine.getByRole("button", { name: "Commande récupérée" }).click();
+      // Double validation de la remise : la pharmacie confirme avoir remis la commande au livreur.
+      await mine.getByTestId("awaiting-handoff").waitFor();
+      await pharmacist.goto(`${BASE}/pharmacie`);
+      await pharmacist.click(`text=${dref}`);
+      await pharmacist.getByRole("button", { name: "Confirmer la remise au livreur" }).click();
+      await pharmacist.getByTestId("handed-off").waitFor();
+      await courier.reload();
       await mine.getByRole("button", { name: "Démarrer la livraison" }).click();
       await mine.locator("input[name=code]").fill("000001");
       await mine.getByRole("button", { name: "Valider la livraison" }).click();
@@ -284,6 +291,38 @@ async function main() {
       for (const t of ["transmise à", "a vérifié votre commande", `Commande ${dref} confirmée`, "Paiement reçu", "a échoué", "confirmée", "livreur (Jonas (démo))", "récupéré", "en cours de livraison", "a été livrée"])
         assert.ok(notes.includes(t), `notification « ${t} »`);
       await shot(client, "suivi-livree");
+      // Clôture : la commande n'est terminée qu'après le client.
+      const closure = client.getByTestId("closure");
+      assert.match(await closure.innerText(), /Vous : en attente/);
+      await closure.getByRole("button", { name: "J'ai bien reçu ma commande" }).click();
+      await client.getByText("Commande clôturée").waitFor();
+      assert.ok((await db.order.findFirstOrThrow({ where: { publicRef: dref } })).closedAt, "commande clôturée par toutes les parties");
+    });
+
+    await check("commander sur deux pharmacies avec un seul panier", async () => {
+      const sro = await db.product.findUniqueOrThrow({ where: { slug: "sro" } });
+      await client.goto(`${BASE}/pharmacies/pharmacie-de-ganhi`);
+      await client.fill(`input[name=q_${sro.id}]`, "1");
+      await client.getByRole("button", { name: "Ajouter au panier" }).first().click();
+      await client.locator('[data-testid=cart-link][aria-label*="1 article"]').waitFor();
+      await client.goto(`${BASE}/pharmacies/pharmacie-de-godomey`);
+      await client.locator("input[name^=q_]").first().fill("2");
+      await client.getByRole("button", { name: "Ajouter au panier" }).first().click();
+      await client.locator('[data-testid=cart-link][aria-label*="3 articles"]').waitFor();
+      await client.goto(`${BASE}/panier`);
+      const cart = client.getByTestId("cart");
+      assert.match(await cart.innerText(), /Ganhi/);
+      assert.match(await cart.innerText(), /Godomey/);
+      await shot(client, "panier");
+      const form = client.getByTestId("checkout-form");
+      await form.locator("input[name=contactName]").fill("Afi");
+      await form.locator("input[name=phone]").fill("+229 01 96 44 55 66");
+      await form.getByRole("button", { name: /Envoyer/ }).click();
+      await client.waitForURL(/\/suivi\/groupe\//);
+      assert.match(await client.getByTestId("checkout-ref").innerText(), /^PAN-/);
+      assert.equal(await client.getByTestId("checkout-orders").locator(":scope > *").count(), 2, "une commande par pharmacie");
+      await shot(client, "panier-suivi");
+      assert.equal(await client.getByTestId("cart-link").getAttribute("aria-label"), "Panier", "le panier est vidé");
     });
 
     await check("le tableau de bord pharmacie affiche l'activité du jour", async () => {
