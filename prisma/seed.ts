@@ -1,5 +1,6 @@
 // Données de démonstration (pharmacies fictives à Brazzaville). Idempotent : relancé à chaque
-// déploiement Vercel, il ne modifie jamais ce qui existe déjà (stocks confirmés, comptes...).
+// déploiement Vercel, il ne modifie jamais ce qui existe déjà (stocks confirmés, commandes...), sauf le
+// mot de passe des comptes de démonstration, réaligné sur DEMO_PHARMACY_PASSWORD s'il a changé.
 import { PrismaClient, type Regulation, type StockSource, type StockStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -113,20 +114,23 @@ async function main() {
     }
     if (password) {
       const email = `${ph.slug}@demo.pharma-ai.local`;
-      await db.pharmacyUser.upsert({
-        where: { email },
-        update: {},
-        create: { email, name: "Pharmacien (démo)", pharmacyId: pharmacy.id, passwordHash: await bcrypt.hash(password, 10) },
-      });
+      const existing = await db.pharmacyUser.findUnique({ where: { email } });
+      if (!existing) {
+        await db.pharmacyUser.create({ data: { email, name: "Pharmacien (démo)", pharmacyId: pharmacy.id, passwordHash: await bcrypt.hash(password, 10) } });
+      } else if (!(await bcrypt.compare(password, existing.passwordHash))) {
+        await db.pharmacyUser.update({ where: { email }, data: { passwordHash: await bcrypt.hash(password, 10) } });
+      }
     }
     i++;
   }
   if (password) {
-    await db.courier.upsert({
-      where: { email: "livreur@demo.pharma-ai.local" },
-      update: {},
-      create: { email: "livreur@demo.pharma-ai.local", name: "Jonas (démo)", phone: "+242065550999", passwordHash: await bcrypt.hash(password, 10) },
-    });
+    const email = "livreur@demo.pharma-ai.local";
+    const existing = await db.courier.findUnique({ where: { email } });
+    if (!existing) {
+      await db.courier.create({ data: { email, name: "Jonas (démo)", phone: "+242065550999", passwordHash: await bcrypt.hash(password, 10) } });
+    } else if (!(await bcrypt.compare(password, existing.passwordHash))) {
+      await db.courier.update({ where: { email }, data: { passwordHash: await bcrypt.hash(password, 10) } });
+    }
   }
   console.log(`Données de démonstration prêtes : ${pharmacies.length} pharmacies, ${products.length} produits.`);
 }
