@@ -60,7 +60,7 @@ Données de démonstration : 6 pharmacies fictives à Cotonou et Abomey-Calavi (
 Les tests utilisent une base PostgreSQL dont le nom contient « test » (voir `.env.test`).
 
 ```bash
-npm test          # 24 tests d'acceptation et de sécurité (services)
+npm test          # 36 tests (acceptation, sécurité, zone de recherche, réglages)
 npm run build && npm run test:e2e   # parcours complet dans Chromium (13 étapes, livreur et administration compris)
 ```
 
