@@ -358,7 +358,7 @@ async function main() {
     await check("inscrire une pharmacie : invisible jusqu'à la validation par l'administration", async () => {
       const owner = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
       await owner.goto(`${BASE}/pharmacie/connexion`);
-      await owner.getByRole("link", { name: "Inscrire ma pharmacie" }).click();
+      await owner.getByRole("link", { name: "Inscrire ma pharmacie" }).first().click();
       const form = owner.getByTestId("pharmacy-signup");
       await form.locator("input[name=name]").fill("Pharmacie Étoile du Port");
       await form.locator("input[name=licenseNumber]").fill("MS/DPMED/2026-118");
