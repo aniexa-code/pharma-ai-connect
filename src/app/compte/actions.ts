@@ -28,7 +28,7 @@ export async function register(_: FormState, fd: FormData): Promise<FormState> {
       password: String(fd.get("password") ?? ""),
       phone: String(fd.get("phone") ?? ""),
       consent: fd.get("consent") === "on",
-    });
+    }, { ip: await clientIp() });
     await startCustomerSession(c.id);
   } catch (e) {
     return { error: publicMessage(e) };

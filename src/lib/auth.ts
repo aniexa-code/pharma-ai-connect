@@ -3,12 +3,20 @@ import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "./db";
-import { ADMIN_COOKIE, ADMIN_MAX_AGE, COURIER_COOKIE, CUSTOMER_COOKIE, CUSTOMER_MAX_AGE, PHARMACY_COOKIE, PHARMACY_MAX_AGE, signSession, verifySession } from "./session";
+import { ADMIN_COOKIE, ADMIN_MAX_AGE, COURIER_COOKIE, CUSTOMER_COOKIE, CUSTOMER_MAX_AGE, PHARMACY_COOKIE, PHARMACY_MAX_AGE, signSession, verifySession, type SessionPayload } from "./session";
+
+/** Session valide du bon type, et pas fermée par une déconnexion (la liste de révocation est en base). */
+async function readSession(cookie: string, kind: SessionPayload["kind"]) {
+  const s = await verifySession((await cookies()).get(cookie)?.value);
+  if (!s || s.kind !== kind) return null;
+  if (await db.revokedSession.findUnique({ where: { jti: s.jti } })) return null;
+  return s;
+}
 
 /** Client connecté (facultatif) : null pour un visiteur, ce qui ne bloque aucun parcours. */
 export const getCustomer = cache(async () => {
-  const s = await verifySession((await cookies()).get(CUSTOMER_COOKIE)?.value);
-  if (!s || s.kind !== "CUSTOMER") return null;
+  const s = await readSession(CUSTOMER_COOKIE, "CUSTOMER");
+  if (!s) return null;
   return db.customer.findUnique({ where: { id: s.uid } });
 });
 
@@ -19,8 +27,8 @@ export async function requireCustomer() {
 }
 
 export const getPharmacyUser = cache(async () => {
-  const s = await verifySession((await cookies()).get(PHARMACY_COOKIE)?.value);
-  if (!s || s.kind !== "PHARMACY") return null;
+  const s = await readSession(PHARMACY_COOKIE, "PHARMACY");
+  if (!s) return null;
   return db.pharmacyUser.findUnique({ where: { id: s.uid }, include: { pharmacy: true } });
 });
 
@@ -32,10 +40,10 @@ export async function requirePharmacyUser() {
   return u;
 }
 
-const cookieOpts = (maxAge: number) => ({
+const cookieOpts = (maxAge: number, sameSite: "lax" | "strict" = "lax") => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+  sameSite,
   path: "/",
   maxAge,
 });
@@ -53,8 +61,8 @@ export async function startPharmacySession(id: string, pharmacyId: string) {
 }
 
 export const getCourier = cache(async () => {
-  const s = await verifySession((await cookies()).get(COURIER_COOKIE)?.value);
-  if (!s || s.kind !== "COURIER") return null;
+  const s = await readSession(COURIER_COOKIE, "COURIER");
+  if (!s) return null;
   // Un livreur en cours de vérification peut se connecter pour suivre son dossier, sans voir de mission.
   return db.courier.findFirst({ where: { id: s.uid, OR: [{ active: true }, { verificationStatus: { not: "APPROVED" } }] } });
 });
@@ -70,8 +78,8 @@ export async function startCourierSession(id: string) {
 }
 
 export const getAdmin = cache(async () => {
-  const s = await verifySession((await cookies()).get(ADMIN_COOKIE)?.value);
-  if (!s || s.kind !== "ADMIN") return null;
+  const s = await readSession(ADMIN_COOKIE, "ADMIN");
+  if (!s) return null;
   return db.adminUser.findFirst({ where: { id: s.uid, active: true } });
 });
 
@@ -82,16 +90,35 @@ export async function requireAdmin() {
 }
 
 export async function startAdminSession(id: string) {
-  (await cookies()).set(ADMIN_COOKIE, await signSession({ uid: id, kind: "ADMIN" }, ADMIN_MAX_AGE), cookieOpts(ADMIN_MAX_AGE));
+  (await cookies()).set(ADMIN_COOKIE, await signSession({ uid: id, kind: "ADMIN" }, ADMIN_MAX_AGE), cookieOpts(ADMIN_MAX_AGE, "strict"));
 }
 
 const COOKIE_OF = { CUSTOMER: CUSTOMER_COOKIE, PHARMACY: PHARMACY_COOKIE, COURIER: COURIER_COOKIE, ADMIN: ADMIN_COOKIE } as const;
 
+/**
+ * Déconnexion : le cookie est effacé ET la session est inscrite comme révoquée, pour qu'un cookie copié
+ * (poste partagé, appareil volé) ne serve plus à rien.
+ */
 export async function endSession(kind: keyof typeof COOKIE_OF) {
-  (await cookies()).delete(COOKIE_OF[kind]);
+  const jar = await cookies();
+  const s = await verifySession(jar.get(COOKIE_OF[kind])?.value);
+  if (s) {
+    await db.revokedSession.upsert({ where: { jti: s.jti }, update: {}, create: { jti: s.jti, expiresAt: new Date(s.exp * 1000) } });
+    if (Math.random() < 0.05) await db.revokedSession.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  }
+  jar.delete(COOKIE_OF[kind]);
 }
 
+/**
+ * Adresse du visiteur. Sur Vercel, x-real-ip et x-forwarded-for sont réécrits par la plateforme
+ * (un visiteur ne peut pas les falsifier) ; x-vercel-forwarded-for est lu en premier quand il existe.
+ */
 export async function clientIp() {
   const h = await headers();
-  return h.get("x-real-ip") || h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  return (
+    h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-real-ip") ||
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  );
 }

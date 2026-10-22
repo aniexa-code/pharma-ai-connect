@@ -29,7 +29,7 @@ const pharmacyForm = () => ({
   city: "Cotonou",
   offersDelivery: true,
   email: `pharma${n}@exemple.bj`,
-  password: "motdepasse",
+  password: "Baobab-Ganvie-26",
   phone: "+229 01 97 00 00 0" + (n % 10),
   consent: true,
 });
@@ -40,7 +40,7 @@ const courierForm = (vehicle: "MOTO" | "VELO") => ({
   vehicle,
   idNumber: "CNI123456",
   email: `livreur${++n}@exemple.bj`,
-  password: "motdepasse",
+  password: "Baobab-Ganvie-26",
   phone: "+229 01 96 00 00 01",
   consent: true,
 });

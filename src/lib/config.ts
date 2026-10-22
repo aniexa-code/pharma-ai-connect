@@ -37,6 +37,8 @@ export const PAYOUT_METHOD_LABEL: Record<string, string> = {
 export function authSecret() {
   const s = process.env.AUTH_SECRET;
   if (!s || s.length < 32) throw new Error("AUTH_SECRET manquant ou trop court (32 caractères minimum).");
+  if (s === "change-moi-par-une-longue-chaine-aleatoire-de-64-caracteres-minimum")
+    throw new Error("AUTH_SECRET est encore la valeur d'exemple : générez une vraie chaîne aléatoire.");
   return s;
 }
 

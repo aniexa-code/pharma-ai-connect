@@ -8,7 +8,7 @@ import { countryInfo, defaultCountryCode } from "../config";
 import { db } from "../db";
 import { ServiceError } from "../errors";
 import { rateLimit } from "../rate-limit";
-import { firstIssue, phoneSchema } from "../validation";
+import { firstIssue, passwordSchema, phoneSchema } from "../validation";
 import { resolvePlace } from "./search";
 import { billingAllowsActive, ensureSubscription } from "./billing";
 
@@ -92,7 +92,7 @@ function docRows(owner: DocumentOwner, ownerId: string, files: UploadedFile[]) {
 
 const account = {
   email: z.string().trim().toLowerCase().email("Adresse e-mail invalide.").max(120),
-  password: z.string().min(8, "Mot de passe : 8 caractères minimum.").max(200),
+  password: passwordSchema,
   phone: phoneSchema,
   consent: z.boolean().refine((v) => v, "Cochez la case pour certifier l'exactitude des informations."),
 };

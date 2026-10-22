@@ -22,6 +22,22 @@ export const phoneSchema = z
   .transform(normalizePhone)
   .refine((p) => /^\+?\d{8,15}$/.test(p), "Numéro de téléphone invalide.");
 
+// Mots de passe parmi les plus essayés par les robots (listes publiques de fuites), en minuscules.
+const COMMON_PASSWORDS = new Set([
+  "12345678", "123456789", "1234567890", "87654321", "11111111", "00000000", "12341234", "azertyui", "azertyuiop",
+  "qwertyui", "qwertyuiop", "password", "password1", "password123", "motdepasse", "motdepasse1", "motdepasse123",
+  "iloveyou", "sunshine", "princess", "football", "abcd1234", "abc12345", "azerty123", "qwerty123", "bonjour1",
+  "bonjour123", "soleil123", "pharmacie", "pharmacie1", "pharmacie123", "cotonou1", "cotonou123", "benin229", "admin123",
+  "administrateur", "changeme", "changemoi", "welcome1", "letmein1",
+]);
+
+/** Mot de passe d'un nouveau compte : 8 caractères minimum, et pas un des mots de passe que les robots essaient en premier. */
+export const passwordSchema = z
+  .string()
+  .min(8, "Mot de passe : 8 caractères minimum.")
+  .max(200)
+  .refine((p) => !COMMON_PASSWORDS.has(p.toLowerCase()) && !/^(.)\1+$/.test(p), "Ce mot de passe est trop courant. Choisissez-en un autre.");
+
 export const channelSchema = z.enum(["SMS", "WHATSAPP", "EMAIL", "LINK"]);
 export type Channel = z.infer<typeof channelSchema>;
 
