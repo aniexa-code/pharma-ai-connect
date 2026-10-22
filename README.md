@@ -151,3 +151,7 @@ Une facture n'est réglée que sur preuve : soit un paiement confirmé par le pr
 - Paiement en ligne : prestataire simulé (`PAYMENT_PROVIDER=sandbox`). Brancher un vrai prestataire Mobile Money / carte revient à appeler `applyPaymentResult` depuis son webhook signé.
 - Pas de téléversement d'ordonnance : l'ordonnance originale est vérifiée au comptoir (collecte de données de santé réduite au strict nécessaire).
 - Les zones géographiques reconnues sont celles de la table `Zone` (quartiers de Cotonou en démo).
+
+## Sécurité
+
+Protections en place et réglages à faire dans Vercel : voir [SECURITE.md](SECURITE.md).

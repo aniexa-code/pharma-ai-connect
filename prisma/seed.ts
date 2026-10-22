@@ -186,9 +186,15 @@ async function main() {
  * admin@demo.pharma-ai.local avec le mot de passe des comptes de démo.
  */
 async function seedAdmin(demoPassword: string | undefined) {
-  const email = (process.env.ADMIN_EMAIL || (demoPassword ? "admin@demo.pharma-ai.local" : "")).toLowerCase();
+  const DEMO_ADMIN = "admin@demo.pharma-ai.local";
+  const email = (process.env.ADMIN_EMAIL || (demoPassword ? DEMO_ADMIN : "")).toLowerCase();
   const pw = process.env.ADMIN_PASSWORD || (process.env.ADMIN_EMAIL ? "" : demoPassword);
+  // Dès qu'un vrai administrateur est configuré, le compte de démonstration (mot de passe partagé) est désactivé.
+  if (process.env.ADMIN_EMAIL && process.env.ADMIN_EMAIL.toLowerCase() !== DEMO_ADMIN)
+    await db.adminUser.updateMany({ where: { email: DEMO_ADMIN, active: true }, data: { active: false } });
   if (!email || !pw) return;
+  if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.length < 12)
+    console.warn("⚠ ADMIN_PASSWORD fait moins de 12 caractères : choisissez un mot de passe plus long pour l'administration.");
   const existing = await db.adminUser.findUnique({ where: { email } });
   if (!existing) await db.adminUser.create({ data: { email, name: "Administration", passwordHash: await bcrypt.hash(pw, 10) } });
   else if (!(await bcrypt.compare(pw, existing.passwordHash))) await db.adminUser.update({ where: { email }, data: { passwordHash: await bcrypt.hash(pw, 10) } });

@@ -551,6 +551,14 @@ model VerificationCode {
   @@index([orderId, purpose])
 }
 
+/// Sessions fermées par une déconnexion : refusées jusqu'à leur expiration naturelle, puis effacées.
+model RevokedSession {
+  jti       String   @id
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
 model RateLimitHit {
   id        String   @id @default(cuid())
   key       String

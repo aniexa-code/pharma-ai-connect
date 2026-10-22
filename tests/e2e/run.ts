@@ -47,6 +47,18 @@ async function main() {
       await new Promise((r) => setTimeout(r, 500));
     }
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium" });
+    // Toute violation de la politique de sécurité (CSP) ou erreur de script fait échouer le test :
+    // un script bloqué par erreur casserait le site sans bruit.
+    const pageErrors: string[] = [];
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async (...args) => {
+      const ctx = await newContext(...args);
+      ctx.on("console", (m) => {
+        if (m.type() === "error" && /Content Security Policy|Refused to/i.test(m.text())) pageErrors.push(m.text());
+      });
+      ctx.on("weberror", (e) => pageErrors.push(String(e.error())));
+      return ctx;
+    };
     const client = await (await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "fr-FR" })).newPage();
     const pharmacist = await (await browser.newContext()).newPage();
 
@@ -451,7 +463,7 @@ async function main() {
       await client.goto(`${BASE}/compte/inscription`);
       await client.fill("input[name=name]", "Grâce");
       await client.fill("input[name=email]", "grace@example.com");
-      await client.fill("input[name=password]", "motdepasse1");
+      await client.fill("input[name=password]", "Baobab-Ganvie-26");
       await client.check("input[name=consent]");
       await client.click("button[type=submit]");
       await client.waitForURL(`${BASE}/compte`);
@@ -465,6 +477,22 @@ async function main() {
       await client.waitForURL(/\/compte\?rattachee=1/);
       await client.getByText(ref).waitFor();
       await shot(client, "compte");
+    });
+
+    await check("en-têtes de sécurité présents et aucun script bloqué pendant tout le parcours", async () => {
+      const res = await fetch(`${BASE}/`);
+      const csp = res.headers.get("content-security-policy") ?? "";
+      assert.match(csp, /script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
+      assert.match(csp, /frame-ancestors 'none'/);
+      assert.match(res.headers.get("strict-transport-security") ?? "", /max-age=63072000/);
+      assert.equal(res.headers.get("x-frame-options"), "DENY");
+      assert.equal(res.headers.get("cross-origin-opener-policy"), "same-origin");
+      const again = (await fetch(`${BASE}/`)).headers.get("content-security-policy");
+      assert.notEqual(again, csp, "un nonce neuf à chaque requête");
+      const priv = await fetch(`${BASE}/admin/connexion`);
+      assert.match(priv.headers.get("x-robots-tag") ?? "", /noindex/);
+      assert.equal((await fetch(`${BASE}/api/cron/billing`)).status, 503, "cron fermé sans CRON_SECRET");
+      assert.deepEqual(pageErrors, []);
     });
 
     await browser.close();

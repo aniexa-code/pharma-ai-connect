@@ -100,13 +100,13 @@ describe("Compte facultatif et rattachement", () => {
   test("créer un compte exige un consentement explicite", async () => {
     await assert.rejects(
       // @ts-expect-error consentement absent
-      registerCustomer({ name: "Grâce", email: "grace@example.com", password: "motdepasse1" }),
+      registerCustomer({ name: "Grâce", email: "grace@example.com", password: "Baobab-Ganvie-26" }),
       /Cochez la case/,
     );
   });
 
   test("un tiers connaissant la référence ne peut pas rattacher la commande à son compte", async () => {
-    const intruder = await registerCustomer({ name: "Intrus", email: "intrus@example.com", password: "motdepasse1", consent: true });
+    const intruder = await registerCustomer({ name: "Intrus", email: "intrus@example.com", password: "Baobab-Ganvie-26", consent: true });
     await assert.rejects(claimWithCode(intruder.id, victim.order.publicRef, "000000"), /invalide/);
     await assert.rejects(claimWithTrackingToken(intruder.id, victim.order.publicRef), /invalide/);
     assert.equal((await db.order.findUniqueOrThrow({ where: { id: victim.order.id } })).customerId, null);
@@ -114,13 +114,13 @@ describe("Compte facultatif et rattachement", () => {
 
   test("le titulaire rattache sa commande avec son lien ; elle ne peut plus être prise par un autre", async () => {
     const owner = await registerCustomer(
-      { name: "Grâce", email: "grace@example.com", password: "motdepasse1", consent: true },
+      { name: "Grâce", email: "grace@example.com", password: "Baobab-Ganvie-26", consent: true },
       { attachTrackingToken: victim.token },
     );
     assert.equal((await db.order.findUniqueOrThrow({ where: { id: victim.order.id } })).customerId, owner.id);
     assert.ok(await orderByTrackingToken(victim.token), "le lien de suivi reste valable après création du compte");
 
-    const other = await registerCustomer({ name: "Autre", email: "autre@example.com", password: "motdepasse1", consent: true });
+    const other = await registerCustomer({ name: "Autre", email: "autre@example.com", password: "Baobab-Ganvie-26", consent: true });
     const { demoCode } = await requestCode("CLAIM_ORDER", victim.order.publicRef, guest.phone, "10.0.0.9");
     await assert.rejects(claimWithCode(other.id, victim.order.publicRef, demoCode!), /déjà rattachée/);
   });

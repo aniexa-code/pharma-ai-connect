@@ -25,7 +25,7 @@ let n = 0;
 async function newPharmacy(now: Date) {
   n++;
   const { pharmacy } = await registerPharmacy(
-    { name: `Pharmacie Abonnée ${n}`, licenseNumber: "AUT-1", ownerName: "Dr Test", address: "Rue 1", district: "Akpakpa", city: "Cotonou", offersDelivery: false, email: `abonne${n}@exemple.bj`, password: "motdepasse", phone: "+22901970000" + n, consent: true },
+    { name: `Pharmacie Abonnée ${n}`, licenseNumber: "AUT-1", ownerName: "Dr Test", address: "Rue 1", district: "Akpakpa", city: "Cotonou", offersDelivery: false, email: `abonne${n}@exemple.bj`, password: "Baobab-Ganvie-26", phone: "+22901970000" + n, consent: true },
     [{ kind: "PHARMACY_LICENSE", name: "l.jpg", type: "image/jpeg", bytes: jpeg }, { kind: "OWNER_ID", name: "i.jpg", type: "image/jpeg", bytes: jpeg }],
     `9.9.9.${n}`,
   );

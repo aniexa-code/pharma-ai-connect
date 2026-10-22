@@ -141,7 +141,7 @@ export async function createAccountAfterOrder(_: FormState, fd: FormData): Promi
         consent: fd.get("consent") === "on",
       },
       // Rattachement uniquement si la case est cochée.
-      { attachTrackingToken: fd.get("attach") === "on" ? token : undefined },
+      { attachTrackingToken: fd.get("attach") === "on" ? token : undefined, ip: await clientIp() },
     );
     await startCustomerSession(c.id);
   } catch (e) {
